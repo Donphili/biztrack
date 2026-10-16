@@ -1,16 +1,91 @@
-# React + Vite
+# BizTrack — Business Management Dashboard
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+BizTrack is a modern business management dashboard designed to help small businesses monitor their performance, track transactions, manage inventory, organize customer information, and review business analytics from one place.
 
-Currently, two official plugins are available:
+## ✨ Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- **Dashboard Overview** — View key business metrics and performance summaries.
+- **Transaction Management** — Monitor business transactions and financial activity.
+- **Inventory Management** — Keep track of products and stock information.
+- **Customer Management** — Organize customer information.
+- **Analytics** — Visualize business data through charts and reports.
+- **Settings** — Access application preferences and configuration options.
+- **Responsive Interface** — A clean dashboard interface designed for usability across screen sizes.
 
-## React Compiler
+## 🛠️ Built With
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- React
+- Vite
+- JavaScript
+- CSS
+- Lucide React — icons
+- Recharts — data visualization
 
-## Expanding the Oxlint configuration
+## 🚀 Getting Started
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and Oxlint's TypeScript related rules in your project.
+### Prerequisites
+
+Install [Node.js](https://nodejs.org/) and npm before getting started.
+
+### Installation
+
+1. Clone the repository:
+
+   ```bash
+   git clone https://github.com/Donphili/biztrack.git
+   ```
+
+2. Navigate into the project directory:
+
+   ```bash
+   cd biztrack
+   ```
+
+3. Install dependencies:
+
+   ```bash
+   npm install
+   ```
+
+4. Start the development server:
+
+   ```bash
+   npm run dev
+   ```
+
+5. Open the local URL displayed in your terminal, usually `http://localhost:5173/`.
+
+## 🏗️ Build for Production
+
+Run the following command to create a production build:
+
+```bash
+npm run build
+```
+
+To preview the production build locally:
+
+```bash
+npm run preview
+```
+
+## 🌐 Deployment
+
+BizTrack can be deployed using [Vercel](https://vercel.com/). Import the GitHub repository and use the default Vite build configuration.
+
+- Build command: `npm run build`
+- Output directory: `dist`
+
+## 📌 Project Status
+
+BizTrack is an evolving project. Features and functionality may change as development continues.
+
+## 👨‍💻 Author
+
+**Don Philip (Donphili)**
+
+- GitHub: [@Donphili](https://github.com/Donphili)
+
+---
+
+Built with React and Vite.
