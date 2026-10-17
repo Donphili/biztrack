@@ -1,5 +1,5 @@
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   LayoutDashboard,
   ArrowLeftRight,
@@ -71,10 +71,31 @@ const money = (amount) =>
     maximumFractionDigits: 2,
   }).format(amount);
 
+function usePersistentState(key, fallback) {
+  const [value, setValue] = useState(() => {
+    try {
+      const saved = window.localStorage.getItem(key);
+      return saved ? JSON.parse(saved) : fallback;
+    } catch {
+      return fallback;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(key, JSON.stringify(value));
+    } catch {
+      // Storage unavailable (private mode or full); keep working in memory.
+    }
+  }, [key, value]);
+
+  return [value, setValue];
+}
+
 function App() {
   const [activePage, setActivePage] = useState("Overview");
-  const [transactions, setTransactions] = useState(initialTransactions);
-  const [products, setProducts] = useState(initialProducts);
+  const [transactions, setTransactions] = usePersistentState("biztrack:transactions", initialTransactions);
+  const [products, setProducts] = usePersistentState("biztrack:products", initialProducts);
   const [search, setSearch] = useState("");
   const [period, setPeriod] = useState("Last 6 months");
   const [menuOpen, setMenuOpen] = useState(false);
