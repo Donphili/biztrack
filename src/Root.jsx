@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "./supabaseClient";
 import { OWNER_CONTACT, OWNER_WHATSAPP_LINK } from "./config";
 import AuthScreen, { ResetPassword } from "./Auth.jsx";
+import Landing from "./Landing.jsx";
 import App from "./App.jsx";
 import "./Auth.css";
 
@@ -16,6 +17,7 @@ export default function Root() {
   const [profile, setProfile] = useState(null);
   const [profileState, setProfileState] = useState("idle");
   const [recovering, setRecovering] = useState(false);
+  const [authView, setAuthView] = useState(null);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session));
@@ -51,6 +53,7 @@ export default function Root() {
   const signOut = async () => {
     setProfile(null);
     setProfileState("idle");
+    setAuthView(null);
     await supabase.auth.signOut();
   };
 
@@ -66,7 +69,12 @@ export default function Root() {
     return <div className="auth-center">Loading BizTrack...</div>;
   }
 
-  if (!session) return <AuthScreen />;
+  if (!session) {
+    if (!authView) {
+      return <Landing onLogin={() => setAuthView("login")} onSignup={() => setAuthView("signup")} />;
+    }
+    return <AuthScreen key={authView} initialMode={authView} onBack={() => setAuthView(null)} />;
+  }
   if (profile && profile.id !== userId) return <div className="auth-center">Loading BizTrack...</div>;
 
   if (profileState === "error") {

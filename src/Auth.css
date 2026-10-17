@@ -38,3 +38,4 @@
 .auth-link { justify-self: end; background: none; border: 0; padding: 0; margin-top: -6px; color: #7667f8; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
 .auth-card a { color: #7667f8; font-weight: 700; }
 .owner-search { height: 40px; min-width: 220px; padding: 0 14px; border: 1px solid #dfe2ee; border-radius: 12px; font: inherit; }
+.auth-back { display: block; margin: 0 0 14px; justify-self: auto; }

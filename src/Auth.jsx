@@ -3,8 +3,8 @@ import { ChartNoAxesCombined } from "lucide-react";
 import { supabase } from "./supabaseClient";
 import "./Auth.css";
 
-export default function AuthScreen() {
-  const [mode, setMode] = useState("login");
+export default function AuthScreen({ initialMode = "login", onBack }) {
+  const [mode, setMode] = useState(initialMode);
   const [businessName, setBusinessName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -56,6 +56,7 @@ export default function AuthScreen() {
   return (
     <div className="auth-page">
       <div className="auth-card">
+        {onBack && <button type="button" className="auth-link auth-back" onClick={onBack}>&larr; Back to home</button>}
         <div className="auth-brand">
           <div className="brand-mark"><ChartNoAxesCombined size={23} strokeWidth={2.6} /></div>
           <span>biz<span className="brand-light">track</span></span>

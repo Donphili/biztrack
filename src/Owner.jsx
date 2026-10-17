@@ -102,9 +102,11 @@ export default function OwnerClients({ currentUserId }) {
                       {status !== "Active" && (
                         <button className="text-button" disabled={busyId === client.id} onClick={() => update(client, { plan: "active" })}>Activate</button>
                       )}
-                      <button className="text-button" disabled={busyId === client.id} onClick={() => update(client, { plan: "trial", trial_ends_at: new Date(Date.now() + 14 * DAY).toISOString() })}>
-                        Extend trial 14 days
-                      </button>
+                      {status !== "Active" && (
+                        <button className="text-button" disabled={busyId === client.id} onClick={() => update(client, { plan: "trial", trial_ends_at: new Date(Date.now() + 14 * DAY).toISOString() })}>
+                          Extend trial 14 days
+                        </button>
+                      )}
                       {status === "Active" && !self && (
                         <button className="text-button" disabled={busyId === client.id} onClick={() => { if (window.confirm(`Deactivate ${client.business_name || client.email}?`)) update(client, { plan: "expired" }); }}>Deactivate</button>
                       )}
