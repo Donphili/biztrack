@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "./supabaseClient";
-import { OWNER_CONTACT } from "./config";
-import AuthScreen from "./Auth.jsx";
+import { OWNER_CONTACT, OWNER_WHATSAPP_LINK } from "./config";
+import AuthScreen, { ResetPassword } from "./Auth.jsx";
 import App from "./App.jsx";
 import "./Auth.css";
 
@@ -15,10 +15,12 @@ export default function Root() {
   const [session, setSession] = useState(undefined);
   const [profile, setProfile] = useState(null);
   const [profileState, setProfileState] = useState("idle");
+  const [recovering, setRecovering] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session));
-    const { data } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+    const { data } = supabase.auth.onAuthStateChange((event, nextSession) => {
+      if (event === "PASSWORD_RECOVERY") setRecovering(true);
       setSession(nextSession);
     });
     return () => data.subscription.unsubscribe();
@@ -52,7 +54,15 @@ export default function Root() {
     await supabase.auth.signOut();
   };
 
-  if (session === undefined || (userId && profileState === "idle")) {
+  if (session === undefined) {
+    return <div className="auth-center">Loading BizTrack...</div>;
+  }
+
+  if (recovering && session) {
+    return <ResetPassword onDone={() => setRecovering(false)} />;
+  }
+
+  if (userId && profileState === "idle") {
     return <div className="auth-center">Loading BizTrack...</div>;
   }
 
@@ -78,7 +88,8 @@ export default function Root() {
           <h1>Your free trial has ended</h1>
           <p className="auth-sub">
             Your records are safe. To keep using BizTrack, activate your subscription.
-            {OWNER_CONTACT ? ` Contact: ${OWNER_CONTACT}` : " Please contact the BizTrack owner to renew."}
+            {" "}Contact the owner to renew:{" "}
+            {OWNER_WHATSAPP_LINK ? <a href={OWNER_WHATSAPP_LINK} target="_blank" rel="noreferrer">{OWNER_CONTACT}</a> : OWNER_CONTACT}
           </p>
           <button className="secondary-button" onClick={signOut}>Log out</button>
         </div>
@@ -88,5 +99,5 @@ export default function Root() {
 
   if (profileState !== "ready") return <div className="auth-center">Loading BizTrack...</div>;
 
-  return <App user={session.user} profile={profile} onSignOut={signOut} />;
+  return <App user={session.user} profile={profile} isOwner={session.user.app_metadata?.is_owner === true} onSignOut={signOut} />;
 }

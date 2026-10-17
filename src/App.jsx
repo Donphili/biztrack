@@ -1,6 +1,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "./supabaseClient";
+import OwnerClients from "./Owner.jsx";
 import {
   LayoutDashboard,
   ArrowLeftRight,
@@ -28,6 +29,7 @@ import {
   HandCoins,
   Trash2,
   LogOut,
+  ShieldCheck,
 } from "lucide-react";
 import {
   Area,
@@ -99,7 +101,7 @@ const fromDebtRow = (row) => ({
 
 const axisMoney = (value) => (Math.abs(value) >= 1000 ? `$${value / 1000}k` : `$${value}`);
 
-function App({ user, profile, onSignOut }) {
+function App({ user, profile, isOwner, onSignOut }) {
   const [activePage, setActivePage] = useState("Overview");
   const [transactions, setTransactions] = useState([]);
   const [products, setProducts] = useState([]);
@@ -134,7 +136,7 @@ function App({ user, profile, onSignOut }) {
   const businessName = profile?.business_name || user?.email?.split("@")[0] || "My business";
   const initials = businessName.split(" ").map((part) => part[0]).slice(0, 2).join("").toUpperCase();
   const [loadedAt] = useState(() => Date.now());
-  const daysLeft = Math.max(0, Math.ceil((new Date(profile?.trial_ends_at) - loadedAt) / 86400000));
+  const daysLeft = Math.max(0, Math.ceil((new Date(profile?.trial_ends_at) - loadedAt) / 86400000 - 0.01));
   const planLabel = profile?.plan === "active" ? "Active plan" : `Free trial · ${daysLeft} days left`;
 
   useEffect(() => {
@@ -433,6 +435,7 @@ function App({ user, profile, onSignOut }) {
     { label: "Customers", icon: Users },
     { label: "Debts", icon: HandCoins },
     { label: "Analytics", icon: ChartNoAxesCombined },
+    ...(isOwner ? [{ label: "Clients", icon: ShieldCheck }] : []),
   ];
 
   const pageDescriptions = {
@@ -442,6 +445,7 @@ function App({ user, profile, onSignOut }) {
     Customers: "Review the customers linked to your transactions.",
     Debts: "Track who owes you money and record payments as they come in.",
     Analytics: "Understand your business performance at a glance.",
+    Clients: "Owner only: see every account and activate paying clients.",
     Settings: "Manage your BizTrack workspace preferences.",
   };
 
@@ -871,7 +875,7 @@ function App({ user, profile, onSignOut }) {
               <p>{pageDescriptions[activePage] || "Manage your business with confidence."}</p>
             </div>
             <div className="heading-actions">
-              {activePage === "Inventory" ? (
+              {activePage === "Clients" ? null : activePage === "Inventory" ? (
                 <button className="primary-button" onClick={() => setShowProductForm(true)}><Plus size={17} /> Add product</button>
               ) : activePage === "Debts" ? (
                 <button className="primary-button" onClick={() => setShowDebtForm(true)}><Plus size={17} /> Add debt</button>
@@ -887,6 +891,7 @@ function App({ user, profile, onSignOut }) {
           {activePage === "Customers" && renderCustomers()}
           {activePage === "Debts" && renderDebts()}
           {activePage === "Analytics" && renderAnalytics()}
+          {activePage === "Clients" && isOwner && <OwnerClients currentUserId={user.id} />}
           {activePage === "Settings" && renderSettings()}
 
           <footer className="app-footer"><span>© 2026 BizTrack. Built for better business.</span><span><i className="footer-status" /> All systems operational</span></footer>
