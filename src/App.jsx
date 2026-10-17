@@ -1,5 +1,6 @@
 
 import { useEffect, useMemo, useState } from "react";
+import { supabase } from "./supabaseClient";
 import {
   LayoutDashboard,
   ArrowLeftRight,
@@ -24,6 +25,9 @@ import {
   MoreHorizontal,
   Boxes,
   Check,
+  HandCoins,
+  Trash2,
+  LogOut,
 } from "lucide-react";
 import {
   Area,
@@ -38,31 +42,14 @@ import {
 } from "recharts";
 import "./App.css";
 
-const initialTransactions = [
-  { id: "TXN-1008", name: "Website redesign", customer: "Olivia Martin", date: "Oct 16, 2026", amount: 1250, type: "Income", status: "Completed", category: "Services" },
-  { id: "TXN-1007", name: "Office supplies", customer: "Office Depot", date: "Oct 15, 2026", amount: -185, type: "Expense", status: "Completed", category: "Operations" },
-  { id: "TXN-1006", name: "Monthly subscription", customer: "James Anderson", date: "Oct 14, 2026", amount: 89, type: "Income", status: "Pending", category: "Subscriptions" },
-  { id: "TXN-1005", name: "Marketing campaign", customer: "Meta Ads", date: "Oct 13, 2026", amount: -320, type: "Expense", status: "Completed", category: "Marketing" },
-  { id: "TXN-1004", name: "Consulting services", customer: "Sophia Williams", date: "Oct 12, 2026", amount: 2400, type: "Income", status: "Completed", category: "Services" },
-  { id: "TXN-1003", name: "Software licenses", customer: "Adobe", date: "Oct 11, 2026", amount: -65, type: "Expense", status: "Pending", category: "Software" },
-];
+const today = () => new Date().toISOString().slice(0, 10);
 
-const initialProducts = [
-  { id: "PRD-001", name: "Wireless Headphones", category: "Electronics", stock: 42, price: 79.99 },
-  { id: "PRD-002", name: "Desk Organizer", category: "Office", stock: 8, price: 24.5 },
-  { id: "PRD-003", name: "USB-C Hub", category: "Electronics", stock: 5, price: 39.99 },
-  { id: "PRD-004", name: "Notebook Set", category: "Stationery", stock: 76, price: 12.0 },
-  { id: "PRD-005", name: "Laptop Stand", category: "Office", stock: 3, price: 49.99 },
-];
-
-const chartData = [
-  { month: "May", income: 5200, expenses: 3100 },
-  { month: "Jun", income: 6800, expenses: 3900 },
-  { month: "Jul", income: 6100, expenses: 3500 },
-  { month: "Aug", income: 8200, expenses: 4600 },
-  { month: "Sep", income: 7400, expenses: 4100 },
-  { month: "Oct", income: 9500, expenses: 5200 },
-];
+function debtStatus(debt) {
+  const outstanding = debt.amount - debt.paid;
+  if (outstanding <= 0) return "Paid";
+  if (debt.dueDate && debt.dueDate < today()) return "Overdue";
+  return debt.paid > 0 ? "Partial" : "Unpaid";
+}
 
 const money = (amount) =>
   new Intl.NumberFormat("en-US", {
@@ -71,31 +58,58 @@ const money = (amount) =>
     maximumFractionDigits: 2,
   }).format(amount);
 
-function usePersistentState(key, fallback) {
-  const [value, setValue] = useState(() => {
-    try {
-      const saved = window.localStorage.getItem(key);
-      return saved ? JSON.parse(saved) : fallback;
-    } catch {
-      return fallback;
-    }
-  });
-
-  useEffect(() => {
-    try {
-      window.localStorage.setItem(key, JSON.stringify(value));
-    } catch {
-      // Storage unavailable (private mode or full); keep working in memory.
-    }
-  }, [key, value]);
-
-  return [value, setValue];
+function formatDate(iso) {
+  if (!iso) return "";
+  const [year, month, day] = iso.split("-").map(Number);
+  return new Date(year, month - 1, day).toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" });
 }
 
-function App() {
+const fromTransactionRow = (row) => ({
+  id: row.id,
+  ref: row.ref,
+  name: row.name,
+  customer: row.customer,
+  amount: Number(row.amount),
+  type: row.type,
+  status: row.status,
+  category: row.category,
+  occurredOn: row.occurred_on,
+  date: formatDate(row.occurred_on),
+});
+
+const fromProductRow = (row) => ({
+  id: row.id,
+  ref: row.ref,
+  name: row.name,
+  category: row.category,
+  stock: Number(row.stock),
+  price: Number(row.price),
+});
+
+const fromDebtRow = (row) => ({
+  id: row.id,
+  ref: row.ref,
+  customer: row.customer,
+  note: row.note,
+  amount: Number(row.amount),
+  paid: Number(row.paid),
+  dueDate: row.due_date || "",
+  createdAt: formatDate(row.created_on),
+});
+
+const axisMoney = (value) => (Math.abs(value) >= 1000 ? `$${value / 1000}k` : `$${value}`);
+
+function App({ user, profile, onSignOut }) {
   const [activePage, setActivePage] = useState("Overview");
-  const [transactions, setTransactions] = usePersistentState("biztrack:transactions", initialTransactions);
-  const [products, setProducts] = usePersistentState("biztrack:products", initialProducts);
+  const [transactions, setTransactions] = useState([]);
+  const [products, setProducts] = useState([]);
+  const [debts, setDebts] = useState([]);
+  const [showDebtForm, setShowDebtForm] = useState(false);
+  const [newDebt, setNewDebt] = useState({ customer: "", note: "", amount: "", dueDate: "" });
+  const [paymentDebt, setPaymentDebt] = useState(null);
+  const [paymentAmount, setPaymentAmount] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [search, setSearch] = useState("");
   const [period, setPeriod] = useState("Last 6 months");
   const [menuOpen, setMenuOpen] = useState(false);
@@ -117,6 +131,67 @@ function App() {
     price: "",
   });
 
+  const businessName = profile?.business_name || user?.email?.split("@")[0] || "My business";
+  const initials = businessName.split(" ").map((part) => part[0]).slice(0, 2).join("").toUpperCase();
+  const [loadedAt] = useState(() => Date.now());
+  const daysLeft = Math.max(0, Math.ceil((new Date(profile?.trial_ends_at) - loadedAt) / 86400000));
+  const planLabel = profile?.plan === "active" ? "Active plan" : `Free trial · ${daysLeft} days left`;
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      const [tx, pr, db] = await Promise.all([
+        supabase.from("transactions").select("*").order("occurred_on", { ascending: false }).order("created_at", { ascending: false }),
+        supabase.from("products").select("*").order("created_at", { ascending: false }),
+        supabase.from("debts").select("*").order("created_at", { ascending: false }),
+      ]);
+      if (cancelled) return;
+      const failure = tx.error || pr.error || db.error;
+      if (failure) {
+        setLoadError(failure.message);
+      } else {
+        setTransactions(tx.data.map(fromTransactionRow));
+        setProducts(pr.data.map(fromProductRow));
+        setDebts(db.data.map(fromDebtRow));
+      }
+      setLoading(false);
+    }
+    load();
+    return () => { cancelled = true; };
+  }, []);
+
+  const monthlyData = useMemo(() => {
+    const now = new Date(loadedAt);
+    const buckets = [];
+    for (let i = 5; i >= 0; i -= 1) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      buckets.push({
+        key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`,
+        month: d.toLocaleDateString("en-US", { month: "short" }),
+        income: 0,
+        expenses: 0,
+      });
+    }
+    transactions.forEach((item) => {
+      const bucket = buckets.find((entry) => entry.key === (item.occurredOn || "").slice(0, 7));
+      if (!bucket) return;
+      if (item.amount > 0) bucket.income += item.amount;
+      else bucket.expenses += Math.abs(item.amount);
+    });
+    return buckets;
+  }, [transactions, loadedAt]);
+
+  const incomeBreakdown = useMemo(() => {
+    const byCategory = new Map();
+    transactions.filter((item) => item.amount > 0).forEach((item) => {
+      byCategory.set(item.category, (byCategory.get(item.category) || 0) + item.amount);
+    });
+    return [...byCategory.entries()]
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 5);
+  }, [transactions]);
+
   const totals = useMemo(() => {
     const income = transactions
       .filter((item) => item.amount > 0)
@@ -130,7 +205,7 @@ function App() {
 
   const filteredTransactions = transactions.filter((item) => {
     const matchesSearch = [
-      item.id,
+      item.ref,
       item.name,
       item.customer,
       item.category,
@@ -147,7 +222,7 @@ function App() {
   });
 
   const filteredProducts = products.filter((item) =>
-    `${item.id} ${item.name} ${item.category}`
+    `${item.ref} ${item.name} ${item.category}`
       .toLowerCase()
       .includes(search.toLowerCase())
   );
@@ -157,7 +232,7 @@ function App() {
     window.setTimeout(() => setNotice(""), 3000);
   };
 
-  function addTransaction(event) {
+  async function addTransaction(event) {
     event.preventDefault();
     const value = Number(newTransaction.amount);
 
@@ -166,35 +241,123 @@ function App() {
       return;
     }
 
-    const amount = newTransaction.type === "Expense" ? -value : value;
-    const item = {
-      id: `TXN-${Date.now().toString().slice(-6)}`,
-      name: newTransaction.name.trim(),
-      customer: newTransaction.customer.trim() || "Unspecified",
-      date: new Date().toLocaleDateString("en-US", {
-        month: "short",
-        day: "2-digit",
-        year: "numeric",
-      }),
-      amount,
-      type: newTransaction.type,
-      status: "Completed",
-      category: newTransaction.category,
-    };
+    const { data, error } = await supabase
+      .from("transactions")
+      .insert({
+        ref: `TXN-${Date.now().toString().slice(-6)}`,
+        name: newTransaction.name.trim(),
+        customer: newTransaction.customer.trim() || "Unspecified",
+        amount: newTransaction.type === "Expense" ? -value : value,
+        type: newTransaction.type,
+        status: "Completed",
+        category: newTransaction.category,
+      })
+      .select()
+      .single();
 
-    setTransactions((current) => [item, ...current]);
-    setNewTransaction({
-      name: "",
-      customer: "",
-      amount: "",
-      type: "Income",
-      category: "Services",
-    });
+    if (error) {
+      notify(error.message);
+      return;
+    }
+
+    setTransactions((current) => [fromTransactionRow(data), ...current]);
+    setNewTransaction({ name: "", customer: "", amount: "", type: "Income", category: "Services" });
     setShowTransactionForm(false);
     notify("Transaction added successfully.");
   }
 
-  function addProduct(event) {
+  async function addDebt(event) {
+    event.preventDefault();
+    const value = Number(newDebt.amount);
+
+    if (!newDebt.customer.trim() || !value || value <= 0) {
+      notify("Enter a customer name and a valid amount.");
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from("debts")
+      .insert({
+        ref: `DBT-${Date.now().toString().slice(-6)}`,
+        customer: newDebt.customer.trim(),
+        note: newDebt.note.trim(),
+        amount: value,
+        due_date: newDebt.dueDate || null,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      notify(error.message);
+      return;
+    }
+
+    setDebts((current) => [fromDebtRow(data), ...current]);
+    setNewDebt({ customer: "", note: "", amount: "", dueDate: "" });
+    setShowDebtForm(false);
+    notify("Debt recorded.");
+  }
+
+  async function recordPayment(event) {
+    event.preventDefault();
+    const value = Number(paymentAmount);
+    const outstanding = paymentDebt.amount - paymentDebt.paid;
+
+    if (!value || value <= 0 || value > outstanding + 0.001) {
+      notify(`Enter an amount between 0.01 and ${money(outstanding)}.`);
+      return;
+    }
+
+    const newPaid = Math.round((paymentDebt.paid + value) * 100) / 100;
+    const { data: updated, error: updateError } = await supabase
+      .from("debts")
+      .update({ paid: newPaid })
+      .eq("id", paymentDebt.id)
+      .select()
+      .single();
+
+    if (updateError) {
+      notify(updateError.message);
+      return;
+    }
+
+    const { data: payment, error: paymentError } = await supabase
+      .from("transactions")
+      .insert({
+        ref: `TXN-${Date.now().toString().slice(-6)}`,
+        name: `Debt payment${paymentDebt.note ? ` - ${paymentDebt.note}` : ""}`,
+        customer: paymentDebt.customer,
+        amount: value,
+        type: "Income",
+        status: "Completed",
+        category: "Debt payment",
+      })
+      .select()
+      .single();
+
+    setDebts((current) => current.map((debt) => (debt.id === updated.id ? fromDebtRow(updated) : debt)));
+    if (paymentError) {
+      notify("Payment saved, but it could not be added to your income: " + paymentError.message);
+    } else {
+      setTransactions((current) => [fromTransactionRow(payment), ...current]);
+      notify("Payment recorded and added to your income.");
+    }
+    setPaymentDebt(null);
+    setPaymentAmount("");
+  }
+
+  async function deleteDebt(debt) {
+    if (!window.confirm(`Delete the debt for ${debt.customer}? This cannot be undone.`)) return;
+    const { error } = await supabase.from("debts").delete().eq("id", debt.id);
+    if (error) {
+      notify(error.message);
+      return;
+    }
+    setDebts((current) => current.filter((item) => item.id !== debt.id));
+    notify("Debt deleted.");
+  }
+
+  async function addProduct(event) {
     event.preventDefault();
 
     if (
@@ -208,23 +371,25 @@ function App() {
       return;
     }
 
-    setProducts((current) => [
-      {
-        id: `PRD-${String(Date.now()).slice(-5)}`,
+    const { data, error } = await supabase
+      .from("products")
+      .insert({
+        ref: `PRD-${String(Date.now()).slice(-5)}`,
         name: newProduct.name.trim(),
         category: newProduct.category,
-        stock: Number(newProduct.stock),
+        stock: Math.round(Number(newProduct.stock)),
         price: Number(newProduct.price),
-      },
-      ...current,
-    ]);
+      })
+      .select()
+      .single();
 
-    setNewProduct({
-      name: "",
-      category: "Electronics",
-      stock: "",
-      price: "",
-    });
+    if (error) {
+      notify(error.message);
+      return;
+    }
+
+    setProducts((current) => [fromProductRow(data), ...current]);
+    setNewProduct({ name: "", category: "Electronics", stock: "", price: "" });
     setShowProductForm(false);
     notify("Product added successfully.");
   }
@@ -233,7 +398,7 @@ function App() {
     const rows = [
       ["ID", "Description", "Customer", "Date", "Type", "Amount", "Status", "Category"],
       ...filteredTransactions.map((item) => [
-        item.id,
+        item.ref,
         item.name,
         item.customer,
         item.date,
@@ -266,6 +431,7 @@ function App() {
     { label: "Transactions", icon: ArrowLeftRight },
     { label: "Inventory", icon: Package },
     { label: "Customers", icon: Users },
+    { label: "Debts", icon: HandCoins },
     { label: "Analytics", icon: ChartNoAxesCombined },
   ];
 
@@ -274,6 +440,7 @@ function App() {
     Transactions: "Track and manage your business income and expenses.",
     Inventory: "Keep your products and stock levels under control.",
     Customers: "Review the customers linked to your transactions.",
+    Debts: "Track who owes you money and record payments as they come in.",
     Analytics: "Understand your business performance at a glance.",
     Settings: "Manage your BizTrack workspace preferences.",
   };
@@ -291,16 +458,16 @@ function App() {
           <MetricCard
             title="Total revenue"
             amount={money(totals.income)}
-            change="+12.8%"
-            caption="Compared with last month"
+            change="Live total"
+            caption="From your records"
             icon={Wallet}
             color="violet"
           />
           <MetricCard
             title="Total expenses"
             amount={money(totals.expenses)}
-            change="+4.3%"
-            caption="Compared with last month"
+            change="Live total"
+            caption="From your records"
             icon={CreditCard}
             color="orange"
             down
@@ -308,15 +475,15 @@ function App() {
           <MetricCard
             title="Net profit"
             amount={money(totals.profit)}
-            change="+18.2%"
-            caption="Compared with last month"
+            change="Live total"
+            caption="From your records"
             icon={TrendingUp}
             color="green"
           />
           <MetricCard
             title="Transactions"
             amount={String(transactions.length).padStart(2, "0")}
-            change="+8.5%"
+            change="Live total"
             caption="Recorded transactions"
             icon={ShoppingCart}
             color="blue"
@@ -349,7 +516,7 @@ function App() {
 
             <div className="chart-wrap">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={chartData} margin={{ top: 12, right: 8, left: -18, bottom: 0 }}>
+                <AreaChart data={monthlyData} margin={{ top: 12, right: 8, left: -18, bottom: 0 }}>
                   <defs>
                     <linearGradient id="revenueGradient" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="0%" stopColor="#7667f8" stopOpacity={0.24} />
@@ -362,7 +529,7 @@ function App() {
                   </defs>
                   <CartesianGrid stroke="#eef0f6" strokeDasharray="4 5" vertical={false} />
                   <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: "#9298a9", fontSize: 12 }} dy={10} />
-                  <YAxis axisLine={false} tickLine={false} tick={{ fill: "#9298a9", fontSize: 11 }} tickFormatter={(value) => `$${value / 1000}k`} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fill: "#9298a9", fontSize: 11 }} tickFormatter={axisMoney} />
                   <Tooltip formatter={(value) => money(value)} contentStyle={{ border: "1px solid #eceef5", borderRadius: 12, boxShadow: "0 8px 24px #20223b12" }} />
                   <Area type="monotone" dataKey="income" name="Revenue" stroke="#7667f8" strokeWidth={2.5} fill="url(#revenueGradient)" />
                   <Area type="monotone" dataKey="expenses" name="Expenses" stroke="#f4a261" strokeWidth={2.5} fill="url(#expenseGradient)" />
@@ -383,15 +550,10 @@ function App() {
             </div>
             <div className="breakdown-chart">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={[
-                  { name: "Services", value: 4200 },
-                  { name: "Products", value: 2800 },
-                  { name: "Retainers", value: 1900 },
-                  { name: "Other", value: 600 },
-                ]} margin={{ top: 12, right: 0, left: -22, bottom: 0 }}>
+                <BarChart data={incomeBreakdown} margin={{ top: 12, right: 0, left: -22, bottom: 0 }}>
                   <CartesianGrid stroke="#eef0f6" strokeDasharray="4 5" vertical={false} />
                   <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: "#9298a9", fontSize: 10 }} />
-                  <YAxis axisLine={false} tickLine={false} tick={{ fill: "#9298a9", fontSize: 10 }} tickFormatter={(value) => `$${value / 1000}k`} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fill: "#9298a9", fontSize: 10 }} tickFormatter={axisMoney} />
                   <Tooltip formatter={(value) => money(value)} />
                   <Bar dataKey="value" name="Income" fill="#7667f8" radius={[6, 6, 0, 0]} maxBarSize={32} />
                 </BarChart>
@@ -469,7 +631,7 @@ function App() {
               {filteredProducts.map((product) => (
                 <tr key={product.id}>
                   <td><div className="transaction-name"><span className="product-icon"><Boxes size={17} /></span><strong>{product.name}</strong></div></td>
-                  <td className="muted-cell">{product.id}</td>
+                  <td className="muted-cell">{product.ref}</td>
                   <td>{product.category}</td>
                   <td>{product.stock} units</td>
                   <td className="amount-cell">{money(product.price)}</td>
@@ -526,6 +688,68 @@ function App() {
     );
   }
 
+  function renderDebts() {
+    const rows = debts.filter((debt) =>
+      `${debt.ref} ${debt.customer} ${debt.note}`.toLowerCase().includes(search.toLowerCase())
+    );
+    const totalOwed = debts.reduce((sum, debt) => sum + Math.max(debt.amount - debt.paid, 0), 0);
+    const totalCollected = debts.reduce((sum, debt) => sum + debt.paid, 0);
+    const overdue = debts.filter((debt) => debtStatus(debt) === "Overdue");
+    const overdueAmount = overdue.reduce((sum, debt) => sum + (debt.amount - debt.paid), 0);
+
+    return (
+      <>
+        <section className="metrics-grid">
+          <MetricCard title="Total owed to you" amount={money(totalOwed)} change="Outstanding" caption="Across all customers" icon={HandCoins} color="violet" />
+          <MetricCard title="Overdue" amount={money(overdueAmount)} change={`${overdue.length} debts`} caption="Past their due date" icon={CreditCard} color="orange" down />
+          <MetricCard title="Collected so far" amount={money(totalCollected)} change="Received" caption="Added to your income" icon={Wallet} color="green" />
+          <MetricCard title="Open debts" amount={String(debts.filter((debt) => debtStatus(debt) !== "Paid").length)} change="Unpaid or partial" caption="Still to collect" icon={Users} color="blue" />
+        </section>
+        <section className="panel table-panel full-table-panel">
+          <div className="panel-heading table-heading">
+            <div>
+              <h2>Customer debts</h2>
+              <p>{debts.length} records</p>
+            </div>
+            <button className="primary-button" onClick={() => setShowDebtForm(true)}>
+              <Plus size={17} /> Add debt
+            </button>
+          </div>
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr><th>Customer</th><th>Total</th><th>Paid</th><th>Remaining</th><th>Due date</th><th>Status</th><th>Actions</th></tr>
+              </thead>
+              <tbody>
+                {rows.map((debt) => {
+                  const status = debtStatus(debt);
+                  const remaining = Math.max(debt.amount - debt.paid, 0);
+                  return (
+                    <tr key={debt.id}>
+                      <td><div className="transaction-name"><span className="product-icon"><HandCoins size={17} /></span><div><strong>{debt.customer}</strong><small>{debt.note || debt.ref}</small></div></div></td>
+                      <td className="amount-cell">{money(debt.amount)}</td>
+                      <td>{money(debt.paid)}</td>
+                      <td className="amount-cell">{money(remaining)}</td>
+                      <td className="muted-cell">{debt.dueDate || "-"}</td>
+                      <td><span className={`status-pill ${status === "Paid" ? "status-completed" : "status-pending"}`}><i />{status}</span></td>
+                      <td>
+                        <div className="table-actions">
+                          {status !== "Paid" && <button className="text-button" onClick={() => { setPaymentDebt(debt); setPaymentAmount(String(remaining)); }}>Record payment</button>}
+                          <button className="icon-button" onClick={() => deleteDebt(debt)} aria-label={`Delete debt for ${debt.customer}`}><Trash2 size={16} /></button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+                {rows.length === 0 && <EmptyRow message="No debts yet. Click Add debt when a customer takes goods on credit." />}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </>
+    );
+  }
+
   function renderAnalytics() {
     return (
       <>
@@ -536,20 +760,20 @@ function App() {
           <MetricCard title="Low stock products" amount={String(products.filter((product) => product.stock < 10).length)} change="Needs attention" caption="Fewer than 10 units" icon={Package} color="blue" />
         </section>
         <section className="panel analytics-panel">
-          <div className="panel-heading"><div><h2>Monthly performance</h2><p>Sample monthly figures for your business</p></div></div>
+          <div className="panel-heading"><div><h2>Monthly performance</h2><p>Income and expenses over the last 6 months</p></div></div>
           <div className="analytics-chart">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData} margin={{ top: 15, right: 15, left: 0, bottom: 5 }}>
+              <BarChart data={monthlyData} margin={{ top: 15, right: 15, left: 0, bottom: 5 }}>
                 <CartesianGrid stroke="#eef0f6" strokeDasharray="4 5" vertical={false} />
                 <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: "#9298a9", fontSize: 12 }} />
-                <YAxis axisLine={false} tickLine={false} tick={{ fill: "#9298a9", fontSize: 11 }} tickFormatter={(value) => `$${value / 1000}k`} />
+                <YAxis axisLine={false} tickLine={false} tick={{ fill: "#9298a9", fontSize: 11 }} tickFormatter={axisMoney} />
                 <Tooltip formatter={(value) => money(value)} />
                 <Bar dataKey="income" name="Revenue" fill="#7667f8" radius={[5, 5, 0, 0]} />
                 <Bar dataKey="expenses" name="Expenses" fill="#f4a261" radius={[5, 5, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
-          <p className="demo-note">The monthly chart uses demonstration data. The headline totals above use the transactions currently in this session.</p>
+          
         </section>
       </>
     );
@@ -560,15 +784,19 @@ function App() {
       <section className="panel settings-panel">
         <div className="settings-icon"><Settings size={25} /></div>
         <h2>Workspace settings</h2>
-        <p>This is the first version of BizTrack. Your business records currently live in browser memory and reset when the page reloads.</p>
-        <div className="settings-item"><span>Application</span><strong>BizTrack MVP</strong></div>
+        <p>Your records are saved securely online and only you can see them.</p>
+        <div className="settings-item"><span>Business</span><strong>{businessName}</strong></div>
+        <div className="settings-item"><span>Email</span><strong>{user?.email}</strong></div>
+        <div className="settings-item"><span>Plan</span><strong>{planLabel}</strong></div>
         <div className="settings-item"><span>Currency</span><strong>USD ($)</strong></div>
-        <div className="settings-item"><span>Data storage</span><strong>Temporary demo data</strong></div>
-        <div className="settings-item"><span>Version</span><strong>1.0.0</strong></div>
-        <p className="demo-note">Next, we'll add persistent saving, authentication, and a database before using this for real business records.</p>
+        <div className="settings-item"><span>Version</span><strong>2.0.0</strong></div>
+        <button className="secondary-button" onClick={onSignOut}><LogOut size={16} /> Log out</button>
       </section>
     );
   }
+
+  if (loading) return <div className="auth-center">Loading your workspace...</div>;
+  if (loadError) return <div className="auth-center">We could not load your data: {loadError}</div>;
 
   return (
     <div className="app-shell">
@@ -582,8 +810,8 @@ function App() {
         </div>
 
         <div className="workspace-switch">
-          <div className="workspace-avatar">D</div>
-          <div className="workspace-copy"><strong>Demo workspace</strong><span>Free plan</span></div>
+          <div className="workspace-avatar">{initials[0] || "B"}</div>
+          <div className="workspace-copy"><strong>{businessName}</strong><span>{planLabel}</span></div>
           <ChevronDown size={16} />
         </div>
 
@@ -611,9 +839,9 @@ function App() {
         </div>
         <button className="help-link" onClick={() => notify("Help center will be available in a future version.")}><CircleHelp size={18} /> Help & support <ArrowUpRight size={14} /></button>
         <div className="profile-row">
-          <div className="profile-avatar">DP</div>
-          <div className="profile-copy"><strong>Demo User</strong><span>Business owner</span></div>
-          <MoreHorizontal size={19} />
+          <div className="profile-avatar">{initials || "B"}</div>
+          <div className="profile-copy"><strong>{businessName}</strong><span>{user?.email}</span></div>
+          <button className="icon-button" onClick={onSignOut} aria-label="Log out" title="Log out"><LogOut size={18} /></button>
         </div>
       </aside>
 
@@ -631,7 +859,7 @@ function App() {
             </label>
             <button className="notification-button icon-button" onClick={() => notify("You're all caught up!")} aria-label="Notifications"><Bell size={19} /><i /></button>
             <div className="topbar-divider" />
-            <div className="topbar-user"><div className="profile-avatar">DP</div><ChevronDown size={15} /></div>
+            <div className="topbar-user"><div className="profile-avatar">{initials || "B"}</div><ChevronDown size={15} /></div>
           </div>
         </header>
 
@@ -639,12 +867,14 @@ function App() {
           <div className="page-heading">
             <div>
               <div className="eyebrow"><span className="live-dot" /> YOUR BUSINESS AT A GLANCE</div>
-              <h1>{activePage === "Overview" ? "Good day, Philip" : activePage}</h1>
+              <h1>{activePage === "Overview" ? `Good day, ${businessName}` : activePage}</h1>
               <p>{pageDescriptions[activePage] || "Manage your business with confidence."}</p>
             </div>
             <div className="heading-actions">
               {activePage === "Inventory" ? (
                 <button className="primary-button" onClick={() => setShowProductForm(true)}><Plus size={17} /> Add product</button>
+              ) : activePage === "Debts" ? (
+                <button className="primary-button" onClick={() => setShowDebtForm(true)}><Plus size={17} /> Add debt</button>
               ) : (
                 <button className="primary-button" onClick={() => setShowTransactionForm(true)}><Plus size={17} /> New transaction</button>
               )}
@@ -655,6 +885,7 @@ function App() {
           {activePage === "Transactions" && renderTransactions()}
           {activePage === "Inventory" && renderInventory()}
           {activePage === "Customers" && renderCustomers()}
+          {activePage === "Debts" && renderDebts()}
           {activePage === "Analytics" && renderAnalytics()}
           {activePage === "Settings" && renderSettings()}
 
@@ -691,6 +922,29 @@ function App() {
         </Modal>
       )}
 
+      {showDebtForm && (
+        <Modal title="Add customer debt" subtitle="Record goods or services given on credit." onClose={() => setShowDebtForm(false)}>
+          <form className="modal-form" onSubmit={addDebt}>
+            <label>Customer name<input autoFocus value={newDebt.customer} onChange={(event) => setNewDebt({ ...newDebt, customer: event.target.value })} placeholder="e.g. Ahmed Salem" required /></label>
+            <label>What was it for?<input value={newDebt.note} onChange={(event) => setNewDebt({ ...newDebt, note: event.target.value })} placeholder="e.g. Phone cases" /></label>
+            <div className="form-row">
+              <label>Amount owed (USD)<input type="number" min="0.01" step="0.01" value={newDebt.amount} onChange={(event) => setNewDebt({ ...newDebt, amount: event.target.value })} placeholder="0.00" required /></label>
+              <label>Due date<input type="date" value={newDebt.dueDate} onChange={(event) => setNewDebt({ ...newDebt, dueDate: event.target.value })} /></label>
+            </div>
+            <div className="modal-actions"><button type="button" className="secondary-button" onClick={() => setShowDebtForm(false)}>Cancel</button><button className="primary-button" type="submit"><Plus size={16} /> Save debt</button></div>
+          </form>
+        </Modal>
+      )}
+
+      {paymentDebt && (
+        <Modal title="Record payment" subtitle={`${paymentDebt.customer} still owes ${money(paymentDebt.amount - paymentDebt.paid)}.`} onClose={() => setPaymentDebt(null)}>
+          <form className="modal-form" onSubmit={recordPayment}>
+            <label>Amount received (USD)<input autoFocus type="number" min="0.01" step="0.01" value={paymentAmount} onChange={(event) => setPaymentAmount(event.target.value)} required /></label>
+            <div className="modal-actions"><button type="button" className="secondary-button" onClick={() => setPaymentDebt(null)}>Cancel</button><button className="primary-button" type="submit"><Check size={16} /> Save payment</button></div>
+          </form>
+        </Modal>
+      )}
+
       {notice && <div className="toast"><span className="toast-check"><Check size={15} /></span>{notice}<button onClick={() => setNotice("")} aria-label="Dismiss notification"><X size={15} /></button></div>}
     </div>
   );
@@ -720,7 +974,7 @@ function TransactionTable({ items, onViewAll }) {
             {items.map((item) => (
               <tr key={item.id}>
                 <td><div className="transaction-name"><span className={`transaction-icon ${item.type === "Income" ? "income-icon" : "expense-icon"}`}>{item.type === "Income" ? <ArrowDownRight size={17} /> : <ArrowUpRight size={17} />}</span><div><strong>{item.name}</strong><small>{item.customer}</small></div></div></td>
-                <td className="muted-cell">{item.id}</td>
+                <td className="muted-cell">{item.ref}</td>
                 <td className="muted-cell">{item.date}</td>
                 <td className={`amount-cell ${item.amount < 0 ? "expense-amount" : ""}`}>{item.amount < 0 ? "−" : "+"}{money(Math.abs(item.amount))}</td>
                 <td><span className={`status-pill ${item.status === "Completed" ? "status-completed" : "status-pending"}`}><i />{item.status}</span></td>
