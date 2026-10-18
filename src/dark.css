@@ -1,0 +1,102 @@
+/* Dark mode for the dashboard, owner page and sign-in screens */
+[data-theme="dark"] body { background: #0d0f1c; }
+[data-theme="dark"] .app-shell { background: #0d0f1c; }
+[data-theme="dark"] .topbar { background: #12142a; border-bottom-color: #23264a; }
+[data-theme="dark"] .breadcrumb { color: #7f85ab; }
+[data-theme="dark"] .breadcrumb span { color: #3f4470; }
+[data-theme="dark"] .breadcrumb strong { color: #e8eaf6; }
+[data-theme="dark"] .search-box { background: #181b36; border-color: #262a4a; color: #7f85ab; }
+[data-theme="dark"] .search-box input { color: #e8eaf6; }
+[data-theme="dark"] .search-box input::placeholder { color: #6b719a; }
+[data-theme="dark"] .search-box kbd { background: #12142a; border-color: #2a2e52; color: #7f85ab; }
+[data-theme="dark"] .icon-button { color: #a3a9cf; }
+[data-theme="dark"] .icon-button:hover { background: #1e2142; }
+[data-theme="dark"] .topbar-divider { background: #262a4a; }
+[data-theme="dark"] .eyebrow { color: #8a90b5; }
+[data-theme="dark"] .page-heading h1 { color: #f1f2fb; }
+[data-theme="dark"] .page-heading p { color: #8a90b5; }
+[data-theme="dark"] .secondary-button { background: #181b36; color: #c6caea; border-color: #2a2e52; }
+[data-theme="dark"] .secondary-button:hover { background: #1f2345; }
+[data-theme="dark"] .metric-card,
+[data-theme="dark"] .panel { background: #151830; border-color: #23264a; box-shadow: 0 3px 14px #00000040; }
+[data-theme="dark"] .metric-title,
+[data-theme="dark"] .metric-caption,
+[data-theme="dark"] .panel-heading p,
+[data-theme="dark"] .chart-legend span,
+[data-theme="dark"] .settings-panel > p,
+[data-theme="dark"] .settings-item span,
+[data-theme="dark"] .breakdown-total span,
+[data-theme="dark"] .app-footer,
+[data-theme="dark"] .demo-note { color: #8a90b5; }
+[data-theme="dark"] .metric-amount,
+[data-theme="dark"] .panel-heading h2,
+[data-theme="dark"] .breakdown-total strong,
+[data-theme="dark"] .settings-item strong,
+[data-theme="dark"] .transaction-name strong,
+[data-theme="dark"] .customer-cell strong { color: #f1f2fb; }
+[data-theme="dark"] .metric-icon.violet,
+[data-theme="dark"] .product-icon,
+[data-theme="dark"] .customer-count,
+[data-theme="dark"] .settings-icon { background: #2a2557; color: #a99eff; }
+[data-theme="dark"] .metric-icon.orange { background: #3a2a20; color: #f0a468; }
+[data-theme="dark"] .metric-icon.green,
+[data-theme="dark"] .income-icon { background: #15352e; color: #3fd0a0; }
+[data-theme="dark"] .metric-icon.blue { background: #172c4a; color: #6aa9f5; }
+[data-theme="dark"] .expense-icon { background: #3a2a20; color: #f0a468; }
+[data-theme="dark"] .period-select { background: #181b36; color: #c6caea; border-color: #2a2e52; }
+[data-theme="dark"] .breakdown-total { border-top-color: #23264a; }
+[data-theme="dark"] .text-button { color: #a99eff; }
+[data-theme="dark"] .text-button:hover { color: #c4bcff; }
+[data-theme="dark"] thead { background: #181b36; }
+[data-theme="dark"] th { color: #8a90b5; border-color: #23264a; }
+[data-theme="dark"] td { color: #c6caea; border-bottom-color: #23264a; }
+[data-theme="dark"] tbody tr:hover { background: #1a1d3a; }
+[data-theme="dark"] .transaction-name small,
+[data-theme="dark"] .muted-cell,
+[data-theme="dark"] .empty-row { color: #7f85ab; }
+[data-theme="dark"] .amount-cell { color: #3fd0a0; }
+[data-theme="dark"] .amount-cell.expense-amount { color: #f0a468; }
+[data-theme="dark"] .status-completed { background: #15352e; color: #3fd0a0; }
+[data-theme="dark"] .status-pending { background: #3a2f1c; color: #f2b45f; }
+[data-theme="dark"] .avatar { background: #2a2557; color: #b4a9ff; }
+[data-theme="dark"] .settings-item { border-bottom-color: #23264a; }
+[data-theme="dark"] .modal-backdrop { background: #04050ecc; }
+[data-theme="dark"] .modal-card { background: #151830; border-color: #2a2e52; box-shadow: 0 25px 80px #00000080; }
+[data-theme="dark"] .modal-heading h2 { color: #f1f2fb; }
+[data-theme="dark"] .modal-heading p { color: #8a90b5; }
+[data-theme="dark"] .modal-form label { color: #c6caea; }
+[data-theme="dark"] .modal-form input,
+[data-theme="dark"] .modal-form select { background: #0f1126; color: #f1f2fb; border-color: #2a2e52; }
+[data-theme="dark"] .modal-form input::placeholder { color: #5f6590; }
+[data-theme="dark"] .modal-actions { border-top-color: #23264a; }
+[data-theme="dark"] .toast { background: #1b1e3d; color: #f1f2fb; border-color: #2a2e52; box-shadow: 0 12px 45px #00000080; }
+[data-theme="dark"] .toast-check { background: #15352e; color: #3fd0a0; }
+[data-theme="dark"] .toast > button { color: #8a90b5; }
+[data-theme="dark"] .owner-search { background: #0f1126; color: #f1f2fb; border-color: #2a2e52; }
+[data-theme="dark"] .settings-select { background: #0f1126; color: #f1f2fb; border-color: #2a2e52; }
+[data-theme="dark"] .recharts-tooltip-wrapper .recharts-default-tooltip { background: #1b1e3d !important; border-color: #2a2e52 !important; }
+[data-theme="dark"] .recharts-default-tooltip .recharts-tooltip-label,
+[data-theme="dark"] .recharts-tooltip-item { color: #e8eaf6 !important; }
+
+/* Sign-in screens */
+[data-theme="dark"] .auth-page,
+[data-theme="dark"] .auth-center { background: #0d0f1c; color: #8a90b5; }
+[data-theme="dark"] .auth-card { background: #151830; border-color: #23264a; box-shadow: 0 18px 50px #00000060; }
+[data-theme="dark"] .auth-brand,
+[data-theme="dark"] .auth-card h1 { color: #f1f2fb; }
+[data-theme="dark"] .auth-sub,
+[data-theme="dark"] .auth-switch { color: #8a90b5; }
+[data-theme="dark"] .auth-form label { color: #c6caea; }
+[data-theme="dark"] .auth-form input { background: #0f1126; border-color: #2a2e52; color: #f1f2fb; }
+[data-theme="dark"] .auth-message.error { background: #3a1d22; color: #ff8d94; }
+[data-theme="dark"] .auth-message.success { background: #15352e; color: #3fd0a0; }
+
+/* Small helpers used by the new theme and landing links */
+.theme-toggle { display: inline-grid; place-items: center; cursor: pointer; }
+.sidebar-link { display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 12px; margin-top: 6px; border: 1px dashed #3a3d63; border-radius: 12px; background: transparent; color: #b9adff; font: inherit; font-weight: 600; cursor: pointer; }
+.sidebar-link:hover { background: #252640; color: #fff; }
+.settings-select { height: 40px; padding: 0 12px; border: 1px solid #dfe2ee; border-radius: 10px; background: #fff; font: inherit; color: #34364d; }
+
+[data-theme="dark"] .settings-panel h2,
+[data-theme="dark"] .settings-panel h3 { color: #f1f2fb; }
+.settings-panel .secondary-button { margin-top: 18px; }

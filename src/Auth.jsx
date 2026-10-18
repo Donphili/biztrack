@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { ChartNoAxesCombined } from "lucide-react";
 import { supabase } from "./supabaseClient";
+import ThemeToggle from "./ThemeToggle.jsx";
 import "./Auth.css";
 
 export default function AuthScreen({ initialMode = "login", onBack }) {
@@ -55,6 +56,7 @@ export default function AuthScreen({ initialMode = "login", onBack }) {
 
   return (
     <div className="auth-page">
+      <div className="auth-theme"><ThemeToggle /></div>
       <div className="auth-card">
         {onBack && <button type="button" className="auth-link auth-back" onClick={onBack}>&larr; Back to home</button>}
         <div className="auth-brand">

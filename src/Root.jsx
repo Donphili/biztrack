@@ -18,6 +18,8 @@ export default function Root() {
   const [profileState, setProfileState] = useState("idle");
   const [recovering, setRecovering] = useState(false);
   const [authView, setAuthView] = useState(null);
+  const [view, setView] = useState("app");
+  const [jump, setJump] = useState(null);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session));
@@ -54,6 +56,7 @@ export default function Root() {
     setProfile(null);
     setProfileState("idle");
     setAuthView(null);
+    setView("app");
     await supabase.auth.signOut();
   };
 
@@ -107,5 +110,29 @@ export default function Root() {
 
   if (profileState !== "ready") return <div className="auth-center">Loading BizTrack...</div>;
 
-  return <App user={session.user} profile={profile} isOwner={session.user.app_metadata?.is_owner === true} onSignOut={signOut} />;
+  const isOwner = session.user.app_metadata?.is_owner === true;
+
+  return (
+    <>
+      <div style={{ display: view === "app" ? "contents" : "none" }}>
+        <App
+          user={session.user}
+          profile={profile}
+          isOwner={isOwner}
+          onSignOut={signOut}
+          onViewLanding={() => { window.scrollTo(0, 0); setView("landing"); }}
+          requestedPage={jump}
+        />
+      </div>
+      {isOwner && view === "landing" && (
+        <Landing
+          ownerMode
+          onSignup={() => setView("app")}
+          onLogin={() => setView("app")}
+          onDashboard={() => setView("app")}
+          onAdmin={() => { setJump({ page: "Clients", id: Date.now() }); setView("app"); }}
+        />
+      )}
+    </>
+  );
 }

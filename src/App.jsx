@@ -2,6 +2,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "./supabaseClient";
 import OwnerClients from "./Owner.jsx";
+import ThemeToggle from "./ThemeToggle.jsx";
+import { useTheme } from "./theme";
+import { CURRENCIES, formatAxis, formatMoney } from "./currency";
 import {
   LayoutDashboard,
   ArrowLeftRight,
@@ -30,6 +33,7 @@ import {
   Trash2,
   LogOut,
   ShieldCheck,
+  Globe,
 } from "lucide-react";
 import {
   Area,
@@ -52,13 +56,6 @@ function debtStatus(debt) {
   if (debt.dueDate && debt.dueDate < today()) return "Overdue";
   return debt.paid > 0 ? "Partial" : "Unpaid";
 }
-
-const money = (amount) =>
-  new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 2,
-  }).format(amount);
 
 function formatDate(iso) {
   if (!iso) return "";
@@ -99,10 +96,20 @@ const fromDebtRow = (row) => ({
   createdAt: formatDate(row.created_on),
 });
 
-const axisMoney = (value) => (Math.abs(value) >= 1000 ? `$${value / 1000}k` : `$${value}`);
-
-function App({ user, profile, isOwner, onSignOut }) {
+function App({ user, profile, isOwner, onSignOut, onViewLanding, requestedPage }) {
   const [activePage, setActivePage] = useState("Overview");
+  const [handledRequest, setHandledRequest] = useState(0);
+  if (requestedPage && requestedPage.id !== handledRequest) {
+    setHandledRequest(requestedPage.id);
+    setActivePage(requestedPage.page);
+  }
+  const [currency, setCurrency] = useState(profile?.currency || "USD");
+  const [theme] = useTheme();
+  const money = (amount) => formatMoney(amount, currency);
+  const axisMoney = (value) => formatAxis(value, currency);
+  const chart = theme === "dark"
+    ? { grid: "#262a4a", tick: "#8a90b5", tooltip: { background: "#1b1e3d", border: "1px solid #2a2e52", borderRadius: 12, color: "#e8eaf6" } }
+    : { grid: "#eef0f6", tick: "#9298a9", tooltip: { border: "1px solid #eceef5", borderRadius: 12, boxShadow: "0 8px 24px #20223b12" } };
   const [transactions, setTransactions] = useState([]);
   const [products, setProducts] = useState([]);
   const [debts, setDebts] = useState([]);
@@ -233,6 +240,18 @@ function App({ user, profile, isOwner, onSignOut }) {
     setNotice(message);
     window.setTimeout(() => setNotice(""), 3000);
   };
+
+  async function changeCurrency(next) {
+    const previous = currency;
+    setCurrency(next);
+    const { error } = await supabase.from("profiles").update({ currency: next }).eq("id", user.id);
+    if (error) {
+      setCurrency(previous);
+      notify(error.message);
+    } else {
+      notify("Currency updated.");
+    }
+  }
 
   async function addTransaction(event) {
     event.preventDefault();
@@ -531,10 +550,10 @@ function App({ user, profile, isOwner, onSignOut }) {
                       <stop offset="100%" stopColor="#f4a261" stopOpacity={0.01} />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid stroke="#eef0f6" strokeDasharray="4 5" vertical={false} />
-                  <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: "#9298a9", fontSize: 12 }} dy={10} />
-                  <YAxis axisLine={false} tickLine={false} tick={{ fill: "#9298a9", fontSize: 11 }} tickFormatter={axisMoney} />
-                  <Tooltip formatter={(value) => money(value)} contentStyle={{ border: "1px solid #eceef5", borderRadius: 12, boxShadow: "0 8px 24px #20223b12" }} />
+                  <CartesianGrid stroke={chart.grid} strokeDasharray="4 5" vertical={false} />
+                  <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: chart.tick, fontSize: 12 }} dy={10} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fill: chart.tick, fontSize: 11 }} tickFormatter={axisMoney} />
+                  <Tooltip formatter={(value) => money(value)} contentStyle={chart.tooltip} />
                   <Area type="monotone" dataKey="income" name="Revenue" stroke="#7667f8" strokeWidth={2.5} fill="url(#revenueGradient)" />
                   <Area type="monotone" dataKey="expenses" name="Expenses" stroke="#f4a261" strokeWidth={2.5} fill="url(#expenseGradient)" />
                 </AreaChart>
@@ -555,10 +574,10 @@ function App({ user, profile, isOwner, onSignOut }) {
             <div className="breakdown-chart">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={incomeBreakdown} margin={{ top: 12, right: 0, left: -22, bottom: 0 }}>
-                  <CartesianGrid stroke="#eef0f6" strokeDasharray="4 5" vertical={false} />
-                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: "#9298a9", fontSize: 10 }} />
-                  <YAxis axisLine={false} tickLine={false} tick={{ fill: "#9298a9", fontSize: 10 }} tickFormatter={axisMoney} />
-                  <Tooltip formatter={(value) => money(value)} />
+                  <CartesianGrid stroke={chart.grid} strokeDasharray="4 5" vertical={false} />
+                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: chart.tick, fontSize: 10 }} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fill: chart.tick, fontSize: 10 }} tickFormatter={axisMoney} />
+                  <Tooltip formatter={(value) => money(value)} contentStyle={chart.tooltip} />
                   <Bar dataKey="value" name="Income" fill="#7667f8" radius={[6, 6, 0, 0]} maxBarSize={32} />
                 </BarChart>
               </ResponsiveContainer>
@@ -570,7 +589,7 @@ function App({ user, profile, isOwner, onSignOut }) {
           </div>
         </section>
 
-        <TransactionTable
+        <TransactionTable money={money}
           items={filteredTransactions.slice(0, 5)}
           onViewAll={() => changePage("Transactions")}
         />
@@ -602,7 +621,7 @@ function App({ user, profile, isOwner, onSignOut }) {
             </button>
           </div>
         </div>
-        <TransactionTable items={filteredTransactions} />
+        <TransactionTable money={money} items={filteredTransactions} />
       </section>
     );
   }
@@ -768,10 +787,10 @@ function App({ user, profile, isOwner, onSignOut }) {
           <div className="analytics-chart">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={monthlyData} margin={{ top: 15, right: 15, left: 0, bottom: 5 }}>
-                <CartesianGrid stroke="#eef0f6" strokeDasharray="4 5" vertical={false} />
-                <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: "#9298a9", fontSize: 12 }} />
-                <YAxis axisLine={false} tickLine={false} tick={{ fill: "#9298a9", fontSize: 11 }} tickFormatter={axisMoney} />
-                <Tooltip formatter={(value) => money(value)} />
+                <CartesianGrid stroke={chart.grid} strokeDasharray="4 5" vertical={false} />
+                <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: chart.tick, fontSize: 12 }} />
+                <YAxis axisLine={false} tickLine={false} tick={{ fill: chart.tick, fontSize: 11 }} tickFormatter={axisMoney} />
+                <Tooltip formatter={(value) => money(value)} contentStyle={chart.tooltip} />
                 <Bar dataKey="income" name="Revenue" fill="#7667f8" radius={[5, 5, 0, 0]} />
                 <Bar dataKey="expenses" name="Expenses" fill="#f4a261" radius={[5, 5, 0, 0]} />
               </BarChart>
@@ -792,7 +811,13 @@ function App({ user, profile, isOwner, onSignOut }) {
         <div className="settings-item"><span>Business</span><strong>{businessName}</strong></div>
         <div className="settings-item"><span>Email</span><strong>{user?.email}</strong></div>
         <div className="settings-item"><span>Plan</span><strong>{planLabel}</strong></div>
-        <div className="settings-item"><span>Currency</span><strong>USD ($)</strong></div>
+        <div className="settings-item">
+          <span>Currency</span>
+          <select className="settings-select" value={currency} onChange={(event) => changeCurrency(event.target.value)} aria-label="Currency">
+            {Object.values(CURRENCIES).map((item) => <option key={item.code} value={item.code}>{item.label}</option>)}
+          </select>
+        </div>
+        <p className="demo-note">Changing currency only changes the symbol. Amounts you already saved are not converted.</p>
         <div className="settings-item"><span>Version</span><strong>2.0.0</strong></div>
         <button className="secondary-button" onClick={onSignOut}><LogOut size={16} /> Log out</button>
       </section>
@@ -834,6 +859,10 @@ function App({ user, profile, isOwner, onSignOut }) {
           <button className={`nav-item ${activePage === "Settings" ? "active" : ""}`} onClick={() => changePage("Settings")}><Settings size={19} strokeWidth={1.8} /><span>Settings</span></button>
         </nav>
 
+        {isOwner && onViewLanding && (
+          <button className="sidebar-link" onClick={onViewLanding}><Globe size={18} /> View landing page</button>
+        )}
+
         <div className="sidebar-spacer" />
         <div className="upgrade-card">
           <div className="upgrade-symbol"><TrendingUp size={19} /></div>
@@ -861,6 +890,7 @@ function App({ user, profile, isOwner, onSignOut }) {
               <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={`Search ${activePage.toLowerCase()}...`} aria-label="Search current page" />
               <kbd>⌘ K</kbd>
             </label>
+            <ThemeToggle />
             <button className="notification-button icon-button" onClick={() => notify("You're all caught up!")} aria-label="Notifications"><Bell size={19} /><i /></button>
             <div className="topbar-divider" />
             <div className="topbar-user"><div className="profile-avatar">{initials || "B"}</div><ChevronDown size={15} /></div>
@@ -904,7 +934,7 @@ function App({ user, profile, isOwner, onSignOut }) {
             <label>Transaction description<input autoFocus value={newTransaction.name} onChange={(event) => setNewTransaction({ ...newTransaction, name: event.target.value })} placeholder="e.g. Website design project" required /></label>
             <label>Customer or vendor<input value={newTransaction.customer} onChange={(event) => setNewTransaction({ ...newTransaction, customer: event.target.value })} placeholder="e.g. Acme Company" /></label>
             <div className="form-row">
-              <label>Amount (USD)<input type="number" min="0.01" step="0.01" value={newTransaction.amount} onChange={(event) => setNewTransaction({ ...newTransaction, amount: event.target.value })} placeholder="0.00" required /></label>
+              <label>Amount ({currency})<input type="number" min="0.01" step="0.01" value={newTransaction.amount} onChange={(event) => setNewTransaction({ ...newTransaction, amount: event.target.value })} placeholder="0.00" required /></label>
               <label>Type<select value={newTransaction.type} onChange={(event) => setNewTransaction({ ...newTransaction, type: event.target.value })}><option>Income</option><option>Expense</option></select></label>
             </div>
             <label>Category<select value={newTransaction.category} onChange={(event) => setNewTransaction({ ...newTransaction, category: event.target.value })}><option>Services</option><option>Products</option><option>Operations</option><option>Marketing</option><option>Software</option><option>Subscriptions</option><option>Other</option></select></label>
@@ -920,7 +950,7 @@ function App({ user, profile, isOwner, onSignOut }) {
             <label>Category<select value={newProduct.category} onChange={(event) => setNewProduct({ ...newProduct, category: event.target.value })}><option>Electronics</option><option>Office</option><option>Stationery</option><option>Accessories</option><option>Other</option></select></label>
             <div className="form-row">
               <label>Stock quantity<input type="number" min="0" step="1" value={newProduct.stock} onChange={(event) => setNewProduct({ ...newProduct, stock: event.target.value })} placeholder="0" required /></label>
-              <label>Unit price (USD)<input type="number" min="0" step="0.01" value={newProduct.price} onChange={(event) => setNewProduct({ ...newProduct, price: event.target.value })} placeholder="0.00" required /></label>
+              <label>Unit price ({currency})<input type="number" min="0" step="0.01" value={newProduct.price} onChange={(event) => setNewProduct({ ...newProduct, price: event.target.value })} placeholder="0.00" required /></label>
             </div>
             <div className="modal-actions"><button type="button" className="secondary-button" onClick={() => setShowProductForm(false)}>Cancel</button><button className="primary-button" type="submit"><Plus size={16} /> Save product</button></div>
           </form>
@@ -933,7 +963,7 @@ function App({ user, profile, isOwner, onSignOut }) {
             <label>Customer name<input autoFocus value={newDebt.customer} onChange={(event) => setNewDebt({ ...newDebt, customer: event.target.value })} placeholder="e.g. Ahmed Salem" required /></label>
             <label>What was it for?<input value={newDebt.note} onChange={(event) => setNewDebt({ ...newDebt, note: event.target.value })} placeholder="e.g. Phone cases" /></label>
             <div className="form-row">
-              <label>Amount owed (USD)<input type="number" min="0.01" step="0.01" value={newDebt.amount} onChange={(event) => setNewDebt({ ...newDebt, amount: event.target.value })} placeholder="0.00" required /></label>
+              <label>Amount owed ({currency})<input type="number" min="0.01" step="0.01" value={newDebt.amount} onChange={(event) => setNewDebt({ ...newDebt, amount: event.target.value })} placeholder="0.00" required /></label>
               <label>Due date<input type="date" value={newDebt.dueDate} onChange={(event) => setNewDebt({ ...newDebt, dueDate: event.target.value })} /></label>
             </div>
             <div className="modal-actions"><button type="button" className="secondary-button" onClick={() => setShowDebtForm(false)}>Cancel</button><button className="primary-button" type="submit"><Plus size={16} /> Save debt</button></div>
@@ -944,7 +974,7 @@ function App({ user, profile, isOwner, onSignOut }) {
       {paymentDebt && (
         <Modal title="Record payment" subtitle={`${paymentDebt.customer} still owes ${money(paymentDebt.amount - paymentDebt.paid)}.`} onClose={() => setPaymentDebt(null)}>
           <form className="modal-form" onSubmit={recordPayment}>
-            <label>Amount received (USD)<input autoFocus type="number" min="0.01" step="0.01" value={paymentAmount} onChange={(event) => setPaymentAmount(event.target.value)} required /></label>
+            <label>Amount received ({currency})<input autoFocus type="number" min="0.01" step="0.01" value={paymentAmount} onChange={(event) => setPaymentAmount(event.target.value)} required /></label>
             <div className="modal-actions"><button type="button" className="secondary-button" onClick={() => setPaymentDebt(null)}>Cancel</button><button className="primary-button" type="submit"><Check size={16} /> Save payment</button></div>
           </form>
         </Modal>
@@ -965,7 +995,7 @@ function MetricCard({ title, amount, change, caption, icon: Icon, color, down = 
   );
 }
 
-function TransactionTable({ items, onViewAll }) {
+function TransactionTable({ items, onViewAll, money }) {
   return (
     <section className="panel table-panel">
       <div className="panel-heading table-heading">

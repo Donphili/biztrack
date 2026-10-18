@@ -39,3 +39,5 @@
 .auth-card a { color: #7667f8; font-weight: 700; }
 .owner-search { height: 40px; min-width: 220px; padding: 0 14px; border: 1px solid #dfe2ee; border-radius: 12px; font: inherit; }
 .auth-back { display: block; margin: 0 0 14px; justify-self: auto; }
+.auth-theme { position: fixed; top: 16px; right: 16px; }
+[data-theme="dark"] .auth-theme .icon-button { color: #c6caea; }
