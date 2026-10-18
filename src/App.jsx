@@ -3,6 +3,8 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "./supabaseClient";
 import OwnerClients from "./Owner.jsx";
 import ThemeToggle from "./ThemeToggle.jsx";
+import PaymentInfo from "./PaymentInfo.jsx";
+import { OWNER_CONTACT, OWNER_WHATSAPP_LINK } from "./config";
 import { useTheme } from "./theme";
 import { CURRENCIES, formatAxis, formatMoney } from "./currency";
 import {
@@ -34,6 +36,7 @@ import {
   LogOut,
   ShieldCheck,
   Globe,
+  Pencil,
 } from "lucide-react";
 import {
   Area,
@@ -47,6 +50,7 @@ import {
   Bar,
 } from "recharts";
 import "./App.css";
+import "./Help.css";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -56,6 +60,26 @@ function debtStatus(debt) {
   if (debt.dueDate && debt.dueDate < today()) return "Overdue";
   return debt.paid > 0 ? "Partial" : "Unpaid";
 }
+
+const TRANSACTION_CATEGORIES = ["Sales", "Services", "Products", "Stock purchase", "Rent", "Salaries", "Transport", "Utilities", "Marketing", "Other"];
+const PRODUCT_CATEGORIES = ["Electronics", "Accessories", "Food", "Clothing", "Beauty", "Office", "Stationery", "Other"];
+
+const localToday = () => new Date().toLocaleDateString("en-CA");
+
+const blankTransaction = () => ({
+  name: "",
+  nameAuto: false,
+  customer: "",
+  amount: "",
+  type: "Income",
+  category: "Sales",
+  date: localToday(),
+  productId: "",
+  quantity: "1",
+});
+
+const withCurrent = (list, current) => (current && !list.includes(current) ? [current, ...list] : list);
+const sortByDate = (list) => [...list].sort((a, b) => (b.occurredOn || "").localeCompare(a.occurredOn || ""));
 
 function formatDate(iso) {
   if (!iso) return "";
@@ -74,6 +98,8 @@ const fromTransactionRow = (row) => ({
   category: row.category,
   occurredOn: row.occurred_on,
   date: formatDate(row.occurred_on),
+  productId: row.product_id,
+  quantity: row.quantity,
 });
 
 const fromProductRow = (row) => ({
@@ -126,13 +152,12 @@ function App({ user, profile, isOwner, onSignOut, onViewLanding, requestedPage }
   const [showProductForm, setShowProductForm] = useState(false);
   const [notice, setNotice] = useState("");
   const [transactionFilter, setTransactionFilter] = useState("All");
-  const [newTransaction, setNewTransaction] = useState({
-    name: "",
-    customer: "",
-    amount: "",
-    type: "Income",
-    category: "Services",
-  });
+  const [newTransaction, setNewTransaction] = useState(blankTransaction);
+  const [todayStr] = useState(localToday);
+  const [editingTransaction, setEditingTransaction] = useState(null);
+  const [transactionForm, setTransactionForm] = useState(null);
+  const [editingProduct, setEditingProduct] = useState(null);
+  const [productForm, setProductForm] = useState(null);
   const [newProduct, setNewProduct] = useState({
     name: "",
     category: "Electronics",
@@ -255,6 +280,25 @@ function App({ user, profile, isOwner, onSignOut, onViewLanding, requestedPage }
     }
   }
 
+  function changeNewTransaction(patch) {
+    setNewTransaction((current) => {
+      const next = { ...current, ...patch };
+      if (next.type === "Expense") next.productId = "";
+      if (next.type === "Income" && next.productId && ("productId" in patch || "quantity" in patch)) {
+        const product = products.find((item) => item.id === next.productId);
+        if (product) {
+          const quantity = Math.max(1, Math.round(Number(next.quantity) || 1));
+          next.amount = String(Math.round(product.price * quantity * 100) / 100);
+          if (!current.name.trim() || current.nameAuto) {
+            next.name = `${product.name} x${quantity}`;
+            next.nameAuto = true;
+          }
+        }
+      }
+      return next;
+    });
+  }
+
   async function addTransaction(event) {
     event.preventDefault();
     const value = Number(newTransaction.amount);
@@ -264,29 +308,168 @@ function App({ user, profile, isOwner, onSignOut, onViewLanding, requestedPage }
       return;
     }
 
+    const ref = `TXN-${Date.now().toString().slice(-6)}`;
+    const productSale = newTransaction.type === "Income" && newTransaction.productId;
+    let row;
+    let failure;
+
+    if (productSale) {
+      const product = products.find((item) => item.id === newTransaction.productId);
+      const quantity = Math.round(Number(newTransaction.quantity));
+      if (!product || !quantity || quantity < 1) {
+        notify("Enter how many units were sold.");
+        return;
+      }
+      if (quantity > product.stock) {
+        notify(`Only ${product.stock} of ${product.name} in stock.`);
+        return;
+      }
+      const result = await supabase.rpc("record_sale", {
+        p_product: product.id,
+        p_quantity: quantity,
+        p_name: newTransaction.name.trim(),
+        p_customer: newTransaction.customer.trim(),
+        p_amount: value,
+        p_category: newTransaction.category,
+        p_ref: ref,
+        p_date: newTransaction.date,
+      });
+      row = result.data;
+      failure = result.error;
+      if (!failure) {
+        setProducts((current) => current.map((item) => (item.id === product.id ? { ...item, stock: item.stock - quantity } : item)));
+      }
+    } else {
+      const result = await supabase
+        .from("transactions")
+        .insert({
+          ref,
+          name: newTransaction.name.trim(),
+          customer: newTransaction.customer.trim() || "Unspecified",
+          amount: newTransaction.type === "Expense" ? -value : value,
+          type: newTransaction.type,
+          status: "Completed",
+          category: newTransaction.category,
+          occurred_on: newTransaction.date,
+        })
+        .select()
+        .single();
+      row = result.data;
+      failure = result.error;
+    }
+
+    if (failure) {
+      notify(failure.message);
+      return;
+    }
+
+    setTransactions((current) => sortByDate([fromTransactionRow(row), ...current]));
+    setNewTransaction(blankTransaction());
+    setShowTransactionForm(false);
+    notify(productSale ? "Sale recorded and stock updated." : "Transaction added successfully.");
+  }
+
+  function openEditTransaction(item) {
+    setEditingTransaction(item);
+    setTransactionForm({
+      name: item.name,
+      customer: item.customer === "Unspecified" ? "" : item.customer,
+      amount: String(Math.abs(item.amount)),
+      type: item.type,
+      category: item.category,
+      date: item.occurredOn,
+    });
+  }
+
+  async function saveTransactionEdit(event) {
+    event.preventDefault();
+    const value = Number(transactionForm.amount);
+    if (!transactionForm.name.trim() || !value || value <= 0) {
+      notify("Enter a description and a valid amount.");
+      return;
+    }
     const { data, error } = await supabase
       .from("transactions")
-      .insert({
-        ref: `TXN-${Date.now().toString().slice(-6)}`,
-        name: newTransaction.name.trim(),
-        customer: newTransaction.customer.trim() || "Unspecified",
-        amount: newTransaction.type === "Expense" ? -value : value,
-        type: newTransaction.type,
-        status: "Completed",
-        category: newTransaction.category,
+      .update({
+        name: transactionForm.name.trim(),
+        customer: transactionForm.customer.trim() || "Unspecified",
+        amount: transactionForm.type === "Expense" ? -value : value,
+        type: transactionForm.type,
+        category: transactionForm.category,
+        occurred_on: transactionForm.date,
       })
+      .eq("id", editingTransaction.id)
       .select()
       .single();
-
     if (error) {
       notify(error.message);
       return;
     }
+    setTransactions((current) => sortByDate(current.map((item) => (item.id === data.id ? fromTransactionRow(data) : item))));
+    setEditingTransaction(null);
+    setTransactionForm(null);
+    notify("Transaction updated.");
+  }
 
-    setTransactions((current) => [fromTransactionRow(data), ...current]);
-    setNewTransaction({ name: "", customer: "", amount: "", type: "Income", category: "Services" });
-    setShowTransactionForm(false);
-    notify("Transaction added successfully.");
+  async function deleteTransaction(item) {
+    let message = `Delete "${item.name}"? This cannot be undone.`;
+    if (item.productId && item.quantity) message = `Delete "${item.name}"? The ${item.quantity} unit(s) will be added back to your stock.`;
+    if (item.category === "Debt payment") message += " The customer's debt will not change.";
+    if (!window.confirm(message)) return;
+    const { error } = await supabase.rpc("delete_transaction", { p_id: item.id });
+    if (error) {
+      notify(error.message);
+      return;
+    }
+    setTransactions((current) => current.filter((entry) => entry.id !== item.id));
+    if (item.productId && item.quantity) {
+      setProducts((current) => current.map((product) => (product.id === item.productId ? { ...product, stock: product.stock + item.quantity } : product)));
+    }
+    notify("Transaction deleted.");
+  }
+
+  function openEditProduct(product) {
+    setEditingProduct(product);
+    setProductForm({ name: product.name, category: product.category, stock: String(product.stock), price: String(product.price) });
+  }
+
+  async function saveProductEdit(event) {
+    event.preventDefault();
+    if (!productForm.name.trim() || productForm.stock === "" || productForm.price === "" || Number(productForm.stock) < 0 || Number(productForm.price) < 0) {
+      notify("Complete all product fields with valid values.");
+      return;
+    }
+    const { data, error } = await supabase
+      .from("products")
+      .update({
+        name: productForm.name.trim(),
+        category: productForm.category,
+        stock: Math.round(Number(productForm.stock)),
+        price: Number(productForm.price),
+      })
+      .eq("id", editingProduct.id)
+      .select()
+      .single();
+    if (error) {
+      notify(error.message);
+      return;
+    }
+    setProducts((current) => current.map((item) => (item.id === data.id ? fromProductRow(data) : item)));
+    setEditingProduct(null);
+    setProductForm(null);
+    notify("Product updated.");
+  }
+
+  async function deleteProduct(product) {
+    if (!window.confirm(`Delete ${product.name}? Your past sales of it are kept.`)) return;
+    const { error } = await supabase.from("products").delete().eq("id", product.id);
+    if (error) {
+      notify(error.message);
+      return;
+    }
+    setProducts((current) => current.filter((item) => item.id !== product.id));
+    setTransactions((current) => current.map((item) => (item.productId === product.id ? { ...item, productId: null, quantity: null } : item)));
+    notify("Product deleted.");
   }
 
   async function addDebt(event) {
@@ -466,6 +649,7 @@ function App({ user, profile, isOwner, onSignOut, onViewLanding, requestedPage }
     Customers: "Review the customers linked to your transactions.",
     Debts: "Track who owes you money and record payments as they come in.",
     Analytics: "Understand your business performance at a glance.",
+    Help: "Quick answers and a direct line to us.",
     Clients: "Owner only: see every account and activate paying clients.",
     Settings: "Manage your BizTrack workspace preferences.",
   };
@@ -623,7 +807,7 @@ function App({ user, profile, isOwner, onSignOut, onViewLanding, requestedPage }
             </button>
           </div>
         </div>
-        <TransactionTable money={money} items={filteredTransactions} />
+        <TransactionTable money={money} items={filteredTransactions} onEdit={openEditTransaction} onDelete={deleteTransaction} />
       </section>
     );
   }
@@ -650,6 +834,7 @@ function App({ user, profile, isOwner, onSignOut, onViewLanding, requestedPage }
                 <th>Stock level</th>
                 <th>Unit price</th>
                 <th>Stock status</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -661,6 +846,12 @@ function App({ user, profile, isOwner, onSignOut, onViewLanding, requestedPage }
                   <td>{product.stock} units</td>
                   <td className="amount-cell">{money(product.price)}</td>
                   <td><span className={`status-pill ${product.stock < 10 ? "status-pending" : "status-completed"}`}>{product.stock < 10 ? "Low stock" : "In stock"}</span></td>
+                  <td>
+                    <div className="table-actions">
+                      <button className="icon-button" onClick={() => openEditProduct(product)} aria-label={`Edit ${product.name}`} title="Edit"><Pencil size={16} /></button>
+                      <button className="icon-button" onClick={() => deleteProduct(product)} aria-label={`Delete ${product.name}`} title="Delete"><Trash2 size={16} /></button>
+                    </div>
+                  </td>
                 </tr>
               ))}
               {filteredProducts.length === 0 && <EmptyRow message="No products match your search." />}
@@ -804,6 +995,65 @@ function App({ user, profile, isOwner, onSignOut, onViewLanding, requestedPage }
     );
   }
 
+  function renderHelp() {
+    const whatsapp = `${OWNER_WHATSAPP_LINK}?text=${encodeURIComponent(`Hi, I need help with BizTrack. Business: ${businessName}. Email: ${user?.email}`)}`;
+    const steps = [
+      { title: "Choose your currency", text: "Pick Naira, Dollar or Kuwaiti Dinar in Settings.", page: "Settings" },
+      { title: "Add your products", text: "In Inventory, add each product with its stock and price. Fewer than 10 units shows as Low stock.", page: "Inventory" },
+      { title: "Record sales and expenses", text: "Tap New transaction. For a product sale, pick the product and quantity and your stock goes down by itself.", page: "Transactions" },
+      { title: "Write down who owes you", text: "In Debts, add what a customer owes and record each payment when it arrives.", page: "Debts" },
+      { title: "Check your profit", text: "Overview shows your revenue, expenses and net profit.", page: "Overview" },
+    ];
+    const faqs = [
+      { q: "I made a mistake. How do I fix it?", a: "In Transactions or Inventory, tap the pencil to edit or the bin to delete. Deleting a product sale puts the units back in stock." },
+      { q: "How do I record a sale and reduce my stock?", a: "Tap New transaction, keep the type as Income, choose the product and the quantity. The amount fills in from the product price and the stock goes down." },
+      { q: "A customer bought on credit. What do I do?", a: "Open Debts, tap Add debt, and enter the customer, amount and due date. When they pay, tap Record payment and it is added to your income." },
+      { q: "Does changing the currency convert my amounts?", a: "No. It only changes the symbol. Amounts you already saved stay the same numbers." },
+      { q: "Can I download my records?", a: "Yes. In Transactions, tap Export CSV to get a file you can open in Excel." },
+      { q: "Is my data private?", a: "Yes. Only you can see your records." },
+      { q: "What happens when my free trial ends?", a: "Your records stay safe, but you cannot add new ones until you pay. See How to pay below, then message us on WhatsApp so we can activate your account." },
+      { q: "I forgot my password.", a: "Log out, then tap Forgot password on the login screen. We will email you a link to choose a new one." },
+    ];
+    return (
+      <>
+        <section className="panel help-panel">
+          <h2>Get started in 5 steps</h2>
+          <ol className="help-steps">
+            {steps.map((step) => (
+              <li key={step.title}>
+                <div><strong>{step.title}</strong><p>{step.text}</p></div>
+                <button className="text-button" onClick={() => changePage(step.page)}>Open {step.page} <ArrowUpRight size={14} /></button>
+              </li>
+            ))}
+          </ol>
+        </section>
+        <section className="panel help-panel">
+          <h2>Common questions</h2>
+          <div className="help-faq">
+            {faqs.map((item) => (
+              <details key={item.q}>
+                <summary>{item.q}</summary>
+                <p>{item.a}</p>
+              </details>
+            ))}
+          </div>
+        </section>
+        <section className="panel help-panel">
+          <h2>How to pay</h2>
+          <p>Pay in your own currency, then message us on WhatsApp and we will activate your account.</p>
+          <PaymentInfo />
+        </section>
+        <section className="panel help-panel help-contact">
+          <div>
+            <h2>Still need help?</h2>
+            <p>Chat with us on WhatsApp ({OWNER_CONTACT.replace("WhatsApp ", "")}). Send us a message and we will get back to you.</p>
+          </div>
+          <a className="primary-button" href={whatsapp} target="_blank" rel="noreferrer">Chat on WhatsApp</a>
+        </section>
+      </>
+    );
+  }
+
   function renderSettings() {
     return (
       <section className="panel settings-panel">
@@ -872,7 +1122,7 @@ function App({ user, profile, isOwner, onSignOut, onViewLanding, requestedPage }
           <p>Stay on top of every transaction and opportunity.</p>
           <button onClick={() => changePage("Analytics")}>Explore analytics <ArrowUpRight size={15} /></button>
         </div>
-        <button className="help-link" onClick={() => notify("Help center will be available in a future version.")}><CircleHelp size={18} /> Help & support <ArrowUpRight size={14} /></button>
+        <button className="help-link" onClick={() => changePage("Help")}><CircleHelp size={18} /> Help & support <ArrowUpRight size={14} /></button>
         <div className="profile-row">
           <div className="profile-avatar">{initials || "B"}</div>
           <div className="profile-copy"><strong>{businessName}</strong><span>{user?.email}</span></div>
@@ -907,7 +1157,7 @@ function App({ user, profile, isOwner, onSignOut, onViewLanding, requestedPage }
               <p>{pageDescriptions[activePage] || "Manage your business with confidence."}</p>
             </div>
             <div className="heading-actions">
-              {activePage === "Clients" ? null : activePage === "Inventory" ? (
+              {activePage === "Clients" || activePage === "Help" ? null : activePage === "Inventory" ? (
                 <button className="primary-button" onClick={() => setShowProductForm(true)}><Plus size={17} /> Add product</button>
               ) : activePage === "Debts" ? (
                 <button className="primary-button" onClick={() => setShowDebtForm(true)}><Plus size={17} /> Add debt</button>
@@ -924,6 +1174,7 @@ function App({ user, profile, isOwner, onSignOut, onViewLanding, requestedPage }
           {activePage === "Debts" && renderDebts()}
           {activePage === "Analytics" && renderAnalytics()}
           {activePage === "Clients" && isOwner && <OwnerClients currentUserId={user.id} />}
+          {activePage === "Help" && renderHelp()}
           {activePage === "Settings" && renderSettings()}
 
           <footer className="app-footer"><span>© 2026 BizTrack. Built for better business.</span><span><i className="footer-status" /> All systems operational</span></footer>
@@ -931,16 +1182,68 @@ function App({ user, profile, isOwner, onSignOut, onViewLanding, requestedPage }
       </main>
 
       {showTransactionForm && (
-        <Modal title="Add transaction" subtitle="Record new income or business expenses." onClose={() => setShowTransactionForm(false)}>
+        <Modal title="Add transaction" subtitle="Record a sale, other income or an expense." onClose={() => setShowTransactionForm(false)}>
           <form className="modal-form" onSubmit={addTransaction}>
-            <label>Transaction description<input autoFocus value={newTransaction.name} onChange={(event) => setNewTransaction({ ...newTransaction, name: event.target.value })} placeholder="e.g. Website design project" required /></label>
-            <label>Customer or vendor<input value={newTransaction.customer} onChange={(event) => setNewTransaction({ ...newTransaction, customer: event.target.value })} placeholder="e.g. Acme Company" /></label>
+            <div className="form-row">
+              <label>Type<select value={newTransaction.type} onChange={(event) => changeNewTransaction({ type: event.target.value })}><option>Income</option><option>Expense</option></select></label>
+              <label>Date<input type="date" value={newTransaction.date} max={todayStr} onChange={(event) => setNewTransaction({ ...newTransaction, date: event.target.value })} required /></label>
+            </div>
+            {newTransaction.type === "Income" && products.length > 0 && (
+              <div className="form-row">
+                <label>Product sold (optional)
+                  <select value={newTransaction.productId} onChange={(event) => changeNewTransaction({ productId: event.target.value })}>
+                    <option value="">Not a product sale</option>
+                    {products.map((item) => <option key={item.id} value={item.id} disabled={item.stock < 1}>{item.name} ({item.stock} in stock)</option>)}
+                  </select>
+                </label>
+                {newTransaction.productId && (
+                  <label>Quantity sold<input type="number" min="1" step="1" value={newTransaction.quantity} onChange={(event) => changeNewTransaction({ quantity: event.target.value })} required /></label>
+                )}
+              </div>
+            )}
+            <label>Description<input autoFocus value={newTransaction.name} onChange={(event) => setNewTransaction({ ...newTransaction, name: event.target.value, nameAuto: false })} placeholder="e.g. Phone case x2" required /></label>
+            <label>Customer or vendor<input value={newTransaction.customer} onChange={(event) => setNewTransaction({ ...newTransaction, customer: event.target.value })} placeholder="e.g. Ahmed" /></label>
             <div className="form-row">
               <label>Amount ({currency})<input type="number" min="0.01" step="0.01" value={newTransaction.amount} onChange={(event) => setNewTransaction({ ...newTransaction, amount: event.target.value })} placeholder="0.00" required /></label>
-              <label>Type<select value={newTransaction.type} onChange={(event) => setNewTransaction({ ...newTransaction, type: event.target.value })}><option>Income</option><option>Expense</option></select></label>
+              <label>Category<select value={newTransaction.category} onChange={(event) => setNewTransaction({ ...newTransaction, category: event.target.value })}>{TRANSACTION_CATEGORIES.map((item) => <option key={item}>{item}</option>)}</select></label>
             </div>
-            <label>Category<select value={newTransaction.category} onChange={(event) => setNewTransaction({ ...newTransaction, category: event.target.value })}><option>Services</option><option>Products</option><option>Operations</option><option>Marketing</option><option>Software</option><option>Subscriptions</option><option>Other</option></select></label>
             <div className="modal-actions"><button type="button" className="secondary-button" onClick={() => setShowTransactionForm(false)}>Cancel</button><button className="primary-button" type="submit"><Plus size={16} /> Save transaction</button></div>
+          </form>
+        </Modal>
+      )}
+
+      {editingTransaction && transactionForm && (
+        <Modal
+          title="Edit transaction"
+          subtitle={editingTransaction.productId ? "To change the product or quantity, delete this sale and record it again." : "Fix a mistake in this record."}
+          onClose={() => setEditingTransaction(null)}
+        >
+          <form className="modal-form" onSubmit={saveTransactionEdit}>
+            <label>Description<input autoFocus value={transactionForm.name} onChange={(event) => setTransactionForm({ ...transactionForm, name: event.target.value })} required /></label>
+            <label>Customer or vendor<input value={transactionForm.customer} onChange={(event) => setTransactionForm({ ...transactionForm, customer: event.target.value })} /></label>
+            <div className="form-row">
+              <label>Amount ({currency})<input type="number" min="0.01" step="0.01" value={transactionForm.amount} onChange={(event) => setTransactionForm({ ...transactionForm, amount: event.target.value })} required /></label>
+              <label>Type<select value={transactionForm.type} disabled={Boolean(editingTransaction.productId)} onChange={(event) => setTransactionForm({ ...transactionForm, type: event.target.value })}><option>Income</option><option>Expense</option></select></label>
+            </div>
+            <div className="form-row">
+              <label>Date<input type="date" value={transactionForm.date} max={todayStr} onChange={(event) => setTransactionForm({ ...transactionForm, date: event.target.value })} required /></label>
+              <label>Category<select value={transactionForm.category} onChange={(event) => setTransactionForm({ ...transactionForm, category: event.target.value })}>{withCurrent(TRANSACTION_CATEGORIES, transactionForm.category).map((item) => <option key={item}>{item}</option>)}</select></label>
+            </div>
+            <div className="modal-actions"><button type="button" className="secondary-button" onClick={() => setEditingTransaction(null)}>Cancel</button><button className="primary-button" type="submit"><Check size={16} /> Save changes</button></div>
+          </form>
+        </Modal>
+      )}
+
+      {editingProduct && productForm && (
+        <Modal title="Edit product" subtitle="Update the details or correct the stock count." onClose={() => setEditingProduct(null)}>
+          <form className="modal-form" onSubmit={saveProductEdit}>
+            <label>Product name<input autoFocus value={productForm.name} onChange={(event) => setProductForm({ ...productForm, name: event.target.value })} required /></label>
+            <label>Category<select value={productForm.category} onChange={(event) => setProductForm({ ...productForm, category: event.target.value })}>{withCurrent(PRODUCT_CATEGORIES, productForm.category).map((item) => <option key={item}>{item}</option>)}</select></label>
+            <div className="form-row">
+              <label>Stock quantity<input type="number" min="0" step="1" value={productForm.stock} onChange={(event) => setProductForm({ ...productForm, stock: event.target.value })} required /></label>
+              <label>Unit price ({currency})<input type="number" min="0" step="0.01" value={productForm.price} onChange={(event) => setProductForm({ ...productForm, price: event.target.value })} required /></label>
+            </div>
+            <div className="modal-actions"><button type="button" className="secondary-button" onClick={() => setEditingProduct(null)}>Cancel</button><button className="primary-button" type="submit"><Check size={16} /> Save changes</button></div>
           </form>
         </Modal>
       )}
@@ -949,7 +1252,7 @@ function App({ user, profile, isOwner, onSignOut, onViewLanding, requestedPage }
         <Modal title="Add product" subtitle="Add an item to your inventory catalog." onClose={() => setShowProductForm(false)}>
           <form className="modal-form" onSubmit={addProduct}>
             <label>Product name<input autoFocus value={newProduct.name} onChange={(event) => setNewProduct({ ...newProduct, name: event.target.value })} placeholder="e.g. Wireless Mouse" required /></label>
-            <label>Category<select value={newProduct.category} onChange={(event) => setNewProduct({ ...newProduct, category: event.target.value })}><option>Electronics</option><option>Office</option><option>Stationery</option><option>Accessories</option><option>Other</option></select></label>
+            <label>Category<select value={newProduct.category} onChange={(event) => setNewProduct({ ...newProduct, category: event.target.value })}>{PRODUCT_CATEGORIES.map((item) => <option key={item}>{item}</option>)}</select></label>
             <div className="form-row">
               <label>Stock quantity<input type="number" min="0" step="1" value={newProduct.stock} onChange={(event) => setNewProduct({ ...newProduct, stock: event.target.value })} placeholder="0" required /></label>
               <label>Unit price ({currency})<input type="number" min="0" step="0.01" value={newProduct.price} onChange={(event) => setNewProduct({ ...newProduct, price: event.target.value })} placeholder="0.00" required /></label>
@@ -997,7 +1300,7 @@ function MetricCard({ title, amount, change, caption, icon: Icon, color, down = 
   );
 }
 
-function TransactionTable({ items, onViewAll, money }) {
+function TransactionTable({ items, onViewAll, money, onEdit, onDelete }) {
   return (
     <section className="panel table-panel">
       <div className="panel-heading table-heading">
@@ -1006,15 +1309,23 @@ function TransactionTable({ items, onViewAll, money }) {
       </div>
       <div className="table-scroll">
         <table>
-          <thead><tr><th>Transaction</th><th>Transaction ID</th><th>Date</th><th>Amount</th><th>Status</th></tr></thead>
+          <thead><tr><th>Transaction</th><th>Transaction ID</th><th>Date</th><th>Amount</th><th>Status</th>{onEdit && <th>Actions</th>}</tr></thead>
           <tbody>
             {items.map((item) => (
               <tr key={item.id}>
-                <td><div className="transaction-name"><span className={`transaction-icon ${item.type === "Income" ? "income-icon" : "expense-icon"}`}>{item.type === "Income" ? <ArrowDownRight size={17} /> : <ArrowUpRight size={17} />}</span><div><strong>{item.name}</strong><small>{item.customer}</small></div></div></td>
+                <td><div className="transaction-name"><span className={`transaction-icon ${item.type === "Income" ? "income-icon" : "expense-icon"}`}>{item.type === "Income" ? <ArrowDownRight size={17} /> : <ArrowUpRight size={17} />}</span><div><strong>{item.name}</strong><small>{item.customer}{item.quantity ? ` · ${item.quantity} sold` : ""}</small></div></div></td>
                 <td className="muted-cell">{item.ref}</td>
                 <td className="muted-cell">{item.date}</td>
                 <td className={`amount-cell ${item.amount < 0 ? "expense-amount" : ""}`}>{item.amount < 0 ? "−" : "+"}{money(Math.abs(item.amount))}</td>
                 <td><span className={`status-pill ${item.status === "Completed" ? "status-completed" : "status-pending"}`}><i />{item.status}</span></td>
+                {onEdit && (
+                  <td>
+                    <div className="table-actions">
+                      <button className="icon-button" onClick={() => onEdit(item)} aria-label={`Edit ${item.name}`} title="Edit"><Pencil size={16} /></button>
+                      <button className="icon-button" onClick={() => onDelete(item)} aria-label={`Delete ${item.name}`} title="Delete"><Trash2 size={16} /></button>
+                    </div>
+                  </td>
+                )}
               </tr>
             ))}
             {items.length === 0 && <EmptyRow message="No transactions found. Try another search or add a transaction." />}

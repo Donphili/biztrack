@@ -1,0 +1,26 @@
+.help-panel { margin-bottom: 22px; padding: 24px; }
+.help-panel h2 { margin: 0 0 6px; font-size: 19px; }
+.help-panel > p { margin: 0 0 16px; color: #6d7388; }
+.help-steps { list-style: none; margin: 16px 0 0; padding: 0; display: grid; gap: 12px; }
+.help-steps li { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 16px; border: 1px solid #eceef5; border-radius: 14px; }
+.help-steps strong { display: block; margin-bottom: 2px; }
+.help-steps p { margin: 0; color: #6d7388; font-size: 14px; line-height: 1.5; }
+.help-steps .text-button { white-space: nowrap; }
+.help-faq { display: grid; gap: 10px; margin-top: 14px; }
+.help-faq details { border: 1px solid #eceef5; border-radius: 14px; }
+.help-faq summary { cursor: pointer; padding: 14px 16px; font-weight: 600; list-style: none; display: flex; justify-content: space-between; gap: 12px; }
+.help-faq summary::-webkit-details-marker { display: none; }
+.help-faq summary::after { content: "+"; color: #7667f8; font-size: 20px; line-height: 1; }
+.help-faq details[open] summary::after { content: "–"; }
+.help-faq details p { margin: 0; padding: 0 16px 16px; color: #6d7388; line-height: 1.6; }
+.help-contact { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.help-contact p { margin: 0; color: #6d7388; }
+.help-contact .primary-button { text-decoration: none; }
+.help-panel .pay-grid { margin-top: 4px; }
+@media (max-width: 700px) { .help-steps li { flex-direction: column; align-items: flex-start; } }
+[data-theme="dark"] .help-steps li, [data-theme="dark"] .help-faq details { border-color: #23264a; }
+[data-theme="dark"] .help-panel h2 { color: #f1f2fb; }
+[data-theme="dark"] .help-steps p, [data-theme="dark"] .help-faq details p, [data-theme="dark"] .help-panel > p, [data-theme="dark"] .help-contact p { color: #8a90b5; }
+[data-theme="dark"] .help-faq summary, [data-theme="dark"] .help-steps strong { color: #f1f2fb; }
+[data-theme="dark"] .help-panel .pay-card { background: #0f1126; border-color: #2a2e52; color: #f1f2fb; }
+[data-theme="dark"] .help-panel .pay-card small, [data-theme="dark"] .help-panel .pay-card p { color: #8a90b5; }
