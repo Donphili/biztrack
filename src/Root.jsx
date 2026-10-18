@@ -3,12 +3,13 @@ import { supabase } from "./supabaseClient";
 import { OWNER_CONTACT, OWNER_WHATSAPP_LINK } from "./config";
 import AuthScreen, { ResetPassword } from "./Auth.jsx";
 import Landing from "./Landing.jsx";
+import PaymentInfo from "./PaymentInfo.jsx";
 import App from "./App.jsx";
 import "./Auth.css";
 
 function hasAccess(profile) {
   if (!profile) return false;
-  if (profile.plan === "active") return true;
+  if (profile.plan === "active") return !profile.paid_until || new Date(profile.paid_until) > new Date();
   return profile.plan === "trial" && new Date(profile.trial_ends_at) > new Date();
 }
 
@@ -93,14 +94,18 @@ export default function Root() {
   }
 
   if (profileState === "ready" && !hasAccess(profile)) {
+    const wasPaid = profile.plan === "active";
     return (
       <div className="auth-center">
         <div className="auth-card">
-          <h1>Your free trial has ended</h1>
+          <h1>{wasPaid ? "Your subscription has ended" : "Your free trial has ended"}</h1>
           <p className="auth-sub">
-            Your records are safe. To keep using BizTrack, activate your subscription.
-            {" "}Contact the owner to renew:{" "}
-            {OWNER_WHATSAPP_LINK ? <a href={OWNER_WHATSAPP_LINK} target="_blank" rel="noreferrer">{OWNER_CONTACT}</a> : OWNER_CONTACT}
+            Your records are safe. To keep adding sales, stock and debts, pay for your plan using one of the options below,
+            then message us on WhatsApp and we will activate your account.
+          </p>
+          <PaymentInfo />
+          <p className="auth-sub">
+            <a href={OWNER_WHATSAPP_LINK} target="_blank" rel="noreferrer">Message us on WhatsApp ({OWNER_CONTACT.replace("WhatsApp ", "")})</a>
           </p>
           <button className="secondary-button" onClick={signOut}>Log out</button>
         </div>

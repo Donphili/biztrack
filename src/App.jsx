@@ -144,7 +144,9 @@ function App({ user, profile, isOwner, onSignOut, onViewLanding, requestedPage }
   const initials = businessName.split(" ").map((part) => part[0]).slice(0, 2).join("").toUpperCase();
   const [loadedAt] = useState(() => Date.now());
   const daysLeft = Math.max(0, Math.ceil((new Date(profile?.trial_ends_at) - loadedAt) / 86400000 - 0.01));
-  const planLabel = profile?.plan === "active" ? "Active plan" : `Free trial · ${daysLeft} days left`;
+  const planLabel = profile?.plan === "active"
+    ? (profile?.paid_until ? `Active until ${formatDate(profile.paid_until.slice(0, 10))}` : "Active plan")
+    : `Free trial · ${daysLeft} days left`;
 
   useEffect(() => {
     let cancelled = false;

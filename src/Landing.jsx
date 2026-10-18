@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { OWNER_WHATSAPP_LINK, PRICES, PRICE_PERIOD } from "./config";
 import ThemeToggle from "./ThemeToggle.jsx";
+import PaymentInfo from "./PaymentInfo.jsx";
 import "./Landing.css";
 
 const whatsappHref = `${OWNER_WHATSAPP_LINK}?text=${encodeURIComponent("Hi, I have a question about BizTrack.")}`;
@@ -37,7 +38,7 @@ const steps = [
 const faqs = [
   { q: "Do I need a card to start?", a: "No. Your 14-day free trial starts as soon as you sign up, with no payment details." },
   { q: "Which currencies can I use?", a: "You can choose Nigerian Naira, US Dollar or Kuwaiti Dinar inside the app, and change it any time in Settings." },
-  { q: "What happens after the trial?", a: "You can still see all your records, but you cannot add new ones until you activate your plan. Message us on WhatsApp and we will help you activate it." },
+  { q: "What happens after the trial?", a: "You can still see all your records, but you cannot add new ones until you pay. Send your payment (see How to pay), message us on WhatsApp, and we activate your account." },
   { q: "Is my business data private?", a: "Yes. Each account can only see its own records." },
   { q: "Can I use it on my phone?", a: "Yes. BizTrack works in the browser on phones, tablets and computers." },
 ];
@@ -116,6 +117,7 @@ export default function Landing({ ownerMode = false, onLogin, onSignup, onDashbo
         <nav className="landing-links">
           <a href="#features">Features</a>
           <a href="#pricing">Pricing</a>
+          <a href="#how-to-pay">How to pay</a>
           <a href="#faq">FAQ</a>
         </nav>
         <div className="landing-nav-actions">
@@ -237,6 +239,13 @@ export default function Landing({ ownerMode = false, onLogin, onSignup, onDashbo
           <button className="landing-button large" onClick={onSignup}>Start free trial</button>
           <p className="landing-note">After your trial, message us on WhatsApp and we will help you activate your plan.</p>
         </div>
+      </section>
+
+      <section className="landing-section" id="how-to-pay">
+        <h2>How to pay</h2>
+        <p className="landing-sub">After your free trial, pay in your own currency and we activate your account.</p>
+        <div className="landing-pay"><PaymentInfo /></div>
+        <p className="landing-note">1. Message us on WhatsApp &nbsp;·&nbsp; 2. Send your payment &nbsp;·&nbsp; 3. We activate your account</p>
       </section>
 
       <section className="landing-section" id="faq">

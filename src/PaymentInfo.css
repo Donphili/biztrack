@@ -1,0 +1,13 @@
+.pay-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; text-align: left; }
+.pay-card { padding: 20px; border-radius: 18px; background: var(--card, #fff); border: 1px solid var(--border, #e5e7f4); color: var(--text, #161934); }
+.pay-card small { display: block; color: var(--muted, #5a5f82); font-weight: 600; margin-bottom: 6px; }
+.pay-card strong { display: block; font-size: 20px; margin-bottom: 4px; }
+.pay-detail { display: inline-block; margin-bottom: 10px; padding: 4px 10px; border-radius: 8px; background: #7c5cff1a; color: #6a4cf0; font-weight: 700; user-select: all; }
+.pay-card p { color: var(--muted, #5a5f82); font-size: 14px; line-height: 1.5; }
+.auth-card .pay-grid { grid-template-columns: 1fr; gap: 10px; margin: 16px 0; }
+.auth-card .pay-card { padding: 14px 16px; }
+.auth-card .pay-card strong { font-size: 17px; }
+@media (max-width: 800px) { .pay-grid { grid-template-columns: 1fr; } }
+[data-theme="dark"] .pay-detail { background: #7c5cff2e; color: #b9adff; }
+[data-theme="dark"] .auth-card .pay-card { background: #0f1126; border-color: #2a2e52; color: #f1f2fb; }
+[data-theme="dark"] .auth-card .pay-card small, [data-theme="dark"] .auth-card .pay-card p { color: #8a90b5; }

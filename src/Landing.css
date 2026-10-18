@@ -183,3 +183,5 @@
 @media (prefers-reduced-motion: reduce) {
   .landing *, .landing *::before, .landing *::after { animation: none !important; transition: none !important; }
 }
+.landing-pay { max-width: 1000px; margin: 34px auto 0; }
+.landing-pay + .landing-note { margin-top: 20px; }

@@ -41,3 +41,4 @@
 .auth-back { display: block; margin: 0 0 14px; justify-self: auto; }
 .auth-theme { position: fixed; top: 16px; right: 16px; }
 [data-theme="dark"] .auth-theme .icon-button { color: #c6caea; }
+.auth-card { max-height: calc(100vh - 48px); overflow-y: auto; }
