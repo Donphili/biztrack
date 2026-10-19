@@ -1,5 +1,5 @@
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "./supabaseClient";
 import OwnerClients from "./Owner.jsx";
 import ThemeToggle from "./ThemeToggle.jsx";
@@ -37,6 +37,7 @@ import {
   ShieldCheck,
   Globe,
   Pencil,
+  ArrowLeft,
 } from "lucide-react";
 import {
   Area,
@@ -1076,6 +1077,31 @@ function App({ user, profile, isOwner, onSignOut, onViewLanding, requestedPage }
     );
   }
 
+  const historyReady = useRef(false);
+  useEffect(() => {
+    if (!historyReady.current) {
+      historyReady.current = true;
+      window.history.replaceState({ bizPage: activePage }, "");
+      return;
+    }
+    if (window.history.state?.bizPage !== activePage) {
+      window.history.pushState({ bizPage: activePage }, "");
+    }
+  }, [activePage]);
+
+  useEffect(() => {
+    function handlePop(event) {
+      const page = event.state?.bizPage;
+      if (!page) return;
+      setActivePage(page);
+      setSearch("");
+      setMenuOpen(false);
+      window.scrollTo(0, 0);
+    }
+    window.addEventListener("popstate", handlePop);
+    return () => window.removeEventListener("popstate", handlePop);
+  }, []);
+
   if (loading) return <div className="auth-center">Loading your workspace...</div>;
   if (loadError) return <div className="auth-center">We could not load your data: {loadError}</div>;
 
@@ -1134,6 +1160,11 @@ function App({ user, profile, isOwner, onSignOut, onViewLanding, requestedPage }
         <header className="topbar">
           <div className="topbar-left">
             <button className="mobile-menu icon-button" onClick={() => setMenuOpen(true)} aria-label="Open menu"><Menu size={21} /></button>
+            {activePage !== "Overview" && (
+              <button className="back-button" onClick={() => window.history.back()} aria-label="Go back">
+                <ArrowLeft size={17} /> <span>Back</span>
+              </button>
+            )}
             <div className="breadcrumb">Workspace <span>/</span> <strong>{activePage}</strong></div>
           </div>
           <div className="topbar-right">

@@ -24,3 +24,9 @@
 [data-theme="dark"] .help-faq summary, [data-theme="dark"] .help-steps strong { color: #f1f2fb; }
 [data-theme="dark"] .help-panel .pay-card { background: #0f1126; border-color: #2a2e52; color: #f1f2fb; }
 [data-theme="dark"] .help-panel .pay-card small, [data-theme="dark"] .help-panel .pay-card p { color: #8a90b5; }
+
+.back-button { display: inline-flex; align-items: center; gap: 6px; height: 38px; padding: 0 14px; margin-right: 6px; border: 1px solid #e3e5f0; border-radius: 12px; background: #fff; color: #34364d; font: inherit; font-weight: 600; cursor: pointer; }
+.back-button:hover { border-color: #7667f8; color: #7667f8; }
+[data-theme="dark"] .back-button { background: #181b36; border-color: #2a2e52; color: #c6caea; }
+[data-theme="dark"] .back-button:hover { border-color: #a99eff; color: #c4bcff; }
+@media (max-width: 700px) { .back-button span { display: none; } .back-button { padding: 0 10px; } }
