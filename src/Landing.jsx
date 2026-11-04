@@ -20,7 +20,7 @@ const whatsappHref = `${OWNER_WHATSAPP_LINK}?text=${encodeURIComponent("Hi, I ha
 
 const features = [
   { icon: Wallet, tone: "violet", title: "Sales and expenses", text: "Record every sale and expense in seconds and see your profit at a glance." },
-  { icon: Package, tone: "teal", title: "Stock control", text: "Keep track of your products and get a warning when stock runs low." },
+  { icon: Package, tone: "teal", title: "Stock control", text: "See what you stocked, what you sold and what is left, with a full history and a warning when stock runs low." },
   { icon: HandCoins, tone: "amber", title: "Customer debts", text: "Write down who owes you, record each payment, and see who is overdue." },
   { icon: Users, tone: "pink", title: "Customer list", text: "See the customers linked to your sales in one place." },
   { icon: ChartNoAxesCombined, tone: "blue", title: "Clear reports", text: "Charts show how your income and expenses change month by month." },

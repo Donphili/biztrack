@@ -38,6 +38,8 @@ import {
   Globe,
   Pencil,
   ArrowLeft,
+  PackagePlus,
+  History,
 } from "lucide-react";
 import {
   Area,
@@ -110,7 +112,17 @@ const fromProductRow = (row) => ({
   category: row.category,
   stock: Number(row.stock),
   price: Number(row.price),
+  stocked: Number(row.stock),
+  sold: 0,
 });
+
+const MOVEMENT_LABELS = {
+  initial: "Opening stock",
+  restock: "Stock added",
+  sale: "Sold",
+  sale_deleted: "Sale deleted",
+  correction: "Correction",
+};
 
 const fromDebtRow = (row) => ({
   id: row.id,
@@ -159,6 +171,10 @@ function App({ user, profile, isOwner, onSignOut, onViewLanding, requestedPage }
   const [transactionForm, setTransactionForm] = useState(null);
   const [editingProduct, setEditingProduct] = useState(null);
   const [productForm, setProductForm] = useState(null);
+  const [stockProduct, setStockProduct] = useState(null);
+  const [stockForm, setStockForm] = useState({ quantity: "", note: "" });
+  const [historyProduct, setHistoryProduct] = useState(null);
+  const [historyRows, setHistoryRows] = useState(null);
   const [newProduct, setNewProduct] = useState({
     name: "",
     category: "Electronics",
@@ -177,10 +193,11 @@ function App({ user, profile, isOwner, onSignOut, onViewLanding, requestedPage }
   useEffect(() => {
     let cancelled = false;
     async function load() {
-      const [tx, pr, db] = await Promise.all([
+      const [tx, pr, db, totals] = await Promise.all([
         supabase.from("transactions").select("*").order("occurred_on", { ascending: false }).order("created_at", { ascending: false }),
         supabase.from("products").select("*").order("created_at", { ascending: false }),
         supabase.from("debts").select("*").order("created_at", { ascending: false }),
+        supabase.from("product_stock_totals").select("*"),
       ]);
       if (cancelled) return;
       const failure = tx.error || pr.error || db.error;
@@ -188,7 +205,12 @@ function App({ user, profile, isOwner, onSignOut, onViewLanding, requestedPage }
         setLoadError(failure.message);
       } else {
         setTransactions(tx.data.map(fromTransactionRow));
-        setProducts(pr.data.map(fromProductRow));
+        const totalsByProduct = new Map((totals.error ? [] : totals.data).map((row) => [row.product_id, row]));
+        setProducts(pr.data.map((row) => {
+          const product = fromProductRow(row);
+          const total = totalsByProduct.get(row.id);
+          return total ? { ...product, stocked: Number(total.stocked), sold: Number(total.sold) } : product;
+        }));
         setDebts(db.data.map(fromDebtRow));
       }
       setLoading(false);
@@ -338,7 +360,7 @@ function App({ user, profile, isOwner, onSignOut, onViewLanding, requestedPage }
       row = result.data;
       failure = result.error;
       if (!failure) {
-        setProducts((current) => current.map((item) => (item.id === product.id ? { ...item, stock: item.stock - quantity } : item)));
+        setProducts((current) => current.map((item) => (item.id === product.id ? { ...item, stock: item.stock - quantity, sold: item.sold + quantity } : item)));
       }
     } else {
       const result = await supabase
@@ -424,9 +446,54 @@ function App({ user, profile, isOwner, onSignOut, onViewLanding, requestedPage }
     }
     setTransactions((current) => current.filter((entry) => entry.id !== item.id));
     if (item.productId && item.quantity) {
-      setProducts((current) => current.map((product) => (product.id === item.productId ? { ...product, stock: product.stock + item.quantity } : product)));
+      setProducts((current) => current.map((product) => (product.id === item.productId ? { ...product, stock: product.stock + item.quantity, sold: Math.max(0, product.sold - item.quantity) } : product)));
     }
     notify("Transaction deleted.");
+  }
+
+  function openAddStock(product) {
+    setStockProduct(product);
+    setStockForm({ quantity: "", note: "" });
+  }
+
+  async function submitAddStock(event) {
+    event.preventDefault();
+    const quantity = Math.round(Number(stockForm.quantity));
+    if (!quantity || quantity < 1) {
+      notify("Enter how many units you are adding.");
+      return;
+    }
+    const { data, error } = await supabase.rpc("add_stock", {
+      p_product: stockProduct.id,
+      p_quantity: quantity,
+      p_note: stockForm.note.trim(),
+    });
+    if (error) {
+      notify(error.message);
+      return;
+    }
+    setProducts((current) => current.map((item) => (
+      item.id === stockProduct.id ? { ...item, stock: Number(data.stock), stocked: item.stocked + quantity } : item
+    )));
+    setStockProduct(null);
+    notify(`${quantity} unit(s) added to ${stockProduct.name}.`);
+  }
+
+  async function openHistory(product) {
+    setHistoryProduct(product);
+    setHistoryRows(null);
+    const { data, error } = await supabase
+      .from("stock_movements")
+      .select("*")
+      .eq("product_id", product.id)
+      .order("created_at", { ascending: false })
+      .limit(100);
+    if (error) {
+      setHistoryProduct(null);
+      notify(error.message);
+      return;
+    }
+    setHistoryRows(data);
   }
 
   function openEditProduct(product) {
@@ -455,7 +522,7 @@ function App({ user, profile, isOwner, onSignOut, onViewLanding, requestedPage }
       notify(error.message);
       return;
     }
-    setProducts((current) => current.map((item) => (item.id === data.id ? fromProductRow(data) : item)));
+    setProducts((current) => current.map((item) => (item.id === data.id ? { ...item, ...fromProductRow(data), stocked: item.stocked, sold: item.sold } : item)));
     setEditingProduct(null);
     setProductForm(null);
     notify("Product updated.");
@@ -595,7 +662,7 @@ function App({ user, profile, isOwner, onSignOut, onViewLanding, requestedPage }
       return;
     }
 
-    setProducts((current) => [fromProductRow(data), ...current]);
+    setProducts((current) => [{ ...fromProductRow(data), stocked: Number(data.stock), sold: 0 }, ...current]);
     setNewProduct({ name: "", category: "Electronics", stock: "", price: "" });
     setShowProductForm(false);
     notify("Product added successfully.");
@@ -636,7 +703,7 @@ function App({ user, profile, isOwner, onSignOut, onViewLanding, requestedPage }
   const navigation = [
     { label: "Overview", icon: LayoutDashboard },
     { label: "Transactions", icon: ArrowLeftRight },
-    { label: "Inventory", icon: Package },
+    { label: "Goods / Products", icon: Package },
     { label: "Customers", icon: Users },
     { label: "Debts", icon: HandCoins },
     { label: "Analytics", icon: ChartNoAxesCombined },
@@ -646,7 +713,7 @@ function App({ user, profile, isOwner, onSignOut, onViewLanding, requestedPage }
   const pageDescriptions = {
     Overview: "Here's what's happening with your business today.",
     Transactions: "Track and manage your business income and expenses.",
-    Inventory: "Keep your products and stock levels under control.",
+    "Goods / Products": "See what you stocked, what you sold and what is left.",
     Customers: "Review the customers linked to your transactions.",
     Debts: "Track who owes you money and record payments as they come in.",
     Analytics: "Understand your business performance at a glance.",
@@ -818,8 +885,8 @@ function App({ user, profile, isOwner, onSignOut, onViewLanding, requestedPage }
       <section className="panel table-panel full-table-panel">
         <div className="panel-heading table-heading">
           <div>
-            <h2>Product inventory</h2>
-            <p>{products.length} products in your catalog</p>
+            <h2>Goods / Products</h2>
+            <p>{products.length} {products.length === 1 ? "item" : "items"} in your catalog</p>
           </div>
           <button className="primary-button" onClick={() => setShowProductForm(true)}>
             <Plus size={17} /> Add product
@@ -832,9 +899,11 @@ function App({ user, profile, isOwner, onSignOut, onViewLanding, requestedPage }
                 <th>Product</th>
                 <th>Product ID</th>
                 <th>Category</th>
-                <th>Stock level</th>
+                <th>Stocked</th>
+                <th>Sold</th>
+                <th>In stock</th>
                 <th>Unit price</th>
-                <th>Stock status</th>
+                <th>Status</th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -844,11 +913,15 @@ function App({ user, profile, isOwner, onSignOut, onViewLanding, requestedPage }
                   <td><div className="transaction-name"><span className="product-icon"><Boxes size={17} /></span><strong>{product.name}</strong></div></td>
                   <td className="muted-cell">{product.ref}</td>
                   <td>{product.category}</td>
-                  <td>{product.stock} units</td>
+                  <td className="muted-cell">{product.stocked}</td>
+                  <td className="muted-cell">{product.sold}</td>
+                  <td><strong>{product.stock}</strong> units</td>
                   <td className="amount-cell">{money(product.price)}</td>
                   <td><span className={`status-pill ${product.stock < 10 ? "status-pending" : "status-completed"}`}>{product.stock < 10 ? "Low stock" : "In stock"}</span></td>
                   <td>
                     <div className="table-actions">
+                      <button className="icon-button" onClick={() => openAddStock(product)} aria-label={`Add stock to ${product.name}`} title="Add stock"><PackagePlus size={16} /></button>
+                      <button className="icon-button" onClick={() => openHistory(product)} aria-label={`Stock history of ${product.name}`} title="Stock history"><History size={16} /></button>
                       <button className="icon-button" onClick={() => openEditProduct(product)} aria-label={`Edit ${product.name}`} title="Edit"><Pencil size={16} /></button>
                       <button className="icon-button" onClick={() => deleteProduct(product)} aria-label={`Delete ${product.name}`} title="Delete"><Trash2 size={16} /></button>
                     </div>
@@ -856,48 +929,6 @@ function App({ user, profile, isOwner, onSignOut, onViewLanding, requestedPage }
                 </tr>
               ))}
               {filteredProducts.length === 0 && <EmptyRow message="No products match your search." />}
-            </tbody>
-          </table>
-        </div>
-      </section>
-    );
-  }
-
-  function renderCustomers() {
-    const customerMap = new Map();
-
-    transactions.forEach((item) => {
-      if (!item.customer || item.customer === "Unspecified" || item.type === "Expense") return;
-      const current = customerMap.get(item.customer) || { name: item.customer, total: 0, count: 0, lastDate: item.date };
-      current.total += item.amount;
-      current.count += 1;
-      customerMap.set(item.customer, current);
-    });
-
-    const customers = [...customerMap.values()];
-
-    return (
-      <section className="panel table-panel full-table-panel">
-        <div className="panel-heading table-heading">
-          <div>
-            <h2>Your customers</h2>
-            <p>Customers appearing in your income records</p>
-          </div>
-          <span className="customer-count">{customers.length} customers</span>
-        </div>
-        <div className="table-scroll">
-          <table>
-            <thead><tr><th>Customer</th><th>Transactions</th><th>Total revenue</th><th>Last recorded date</th></tr></thead>
-            <tbody>
-              {customers.map((customer) => (
-                <tr key={customer.name}>
-                  <td><div className="customer-cell"><span className="avatar">{customer.name.split(" ").map((part) => part[0]).slice(0, 2).join("")}</span><strong>{customer.name}</strong></div></td>
-                  <td>{customer.count}</td>
-                  <td className="amount-cell">{money(customer.total)}</td>
-                  <td className="muted-cell">{customer.lastDate}</td>
-                </tr>
-              ))}
-              {customers.length === 0 && <EmptyRow message="Add income transactions with customer names to see customers here." />}
             </tbody>
           </table>
         </div>
@@ -1000,13 +1031,15 @@ function App({ user, profile, isOwner, onSignOut, onViewLanding, requestedPage }
     const whatsapp = `${OWNER_WHATSAPP_LINK}?text=${encodeURIComponent(`Hi, I need help with BizTrack. Business: ${businessName}. Email: ${user?.email}`)}`;
     const steps = [
       { title: "Choose your currency", text: "Pick Naira, Dollar or Kuwaiti Dinar in Settings.", page: "Settings" },
-      { title: "Add your products", text: "In Inventory, add each product with its stock and price. Fewer than 10 units shows as Low stock.", page: "Inventory" },
+      { title: "Add your products", text: "In Goods / Products, add each item with how many you have and its price. Fewer than 10 left shows as Low stock.", page: "Goods / Products" },
       { title: "Record sales and expenses", text: "Tap New transaction. For a product sale, pick the product and quantity and your stock goes down by itself.", page: "Transactions" },
       { title: "Write down who owes you", text: "In Debts, add what a customer owes and record each payment when it arrives.", page: "Debts" },
       { title: "Check your profit", text: "Overview shows your revenue, expenses and net profit.", page: "Overview" },
     ];
     const faqs = [
-      { q: "I made a mistake. How do I fix it?", a: "In Transactions or Inventory, tap the pencil to edit or the bin to delete. Deleting a product sale puts the units back in stock." },
+      { q: "I made a mistake. How do I fix it?", a: "In Transactions or Goods / Products, tap the pencil to edit or the bin to delete. Deleting a product sale puts the units back in stock." },
+      { q: "How do I add more stock when I buy more goods?", a: "In Goods / Products, tap the box button on that product, enter how many you received and save. The new total is added and your history keeps the earlier numbers." },
+      { q: "Where can I see how many I stocked and sold?", a: "Goods / Products shows Stocked, Sold and In stock for every item. Tap the clock button on a product to see its full history, such as 100 stocked, then 50 sold." },
       { q: "How do I record a sale and reduce my stock?", a: "Tap New transaction, keep the type as Income, choose the product and the quantity. The amount fills in from the product price and the stock goes down." },
       { q: "A customer bought on credit. What do I do?", a: "Open Debts, tap Add debt, and enter the customer, amount and due date. When they pay, tap Record payment and it is added to your income." },
       { q: "Does changing the currency convert my amounts?", a: "No. It only changes the symbol. Amounts you already saved stay the same numbers." },
@@ -1127,7 +1160,7 @@ function App({ user, profile, isOwner, onSignOut, onViewLanding, requestedPage }
           {navigation.map(({ label, icon: Icon }) => (
             <button key={label} className={`nav-item ${activePage === label ? "active" : ""}`} onClick={() => changePage(label)}>
               <Icon size={19} strokeWidth={1.8} /><span>{label}</span>
-              {label === "Inventory" && products.some((product) => product.stock < 10) && <span className="nav-count">{products.filter((product) => product.stock < 10).length}</span>}
+              {label === "Goods / Products" && products.some((product) => product.stock < 10) && <span className="nav-count">{products.filter((product) => product.stock < 10).length}</span>}
             </button>
           ))}
         </nav>
@@ -1188,7 +1221,7 @@ function App({ user, profile, isOwner, onSignOut, onViewLanding, requestedPage }
               <p>{pageDescriptions[activePage] || "Manage your business with confidence."}</p>
             </div>
             <div className="heading-actions">
-              {activePage === "Clients" || activePage === "Help" ? null : activePage === "Inventory" ? (
+              {activePage === "Clients" || activePage === "Help" ? null : activePage === "Goods / Products" ? (
                 <button className="primary-button" onClick={() => setShowProductForm(true)}><Plus size={17} /> Add product</button>
               ) : activePage === "Debts" ? (
                 <button className="primary-button" onClick={() => setShowDebtForm(true)}><Plus size={17} /> Add debt</button>
@@ -1200,7 +1233,7 @@ function App({ user, profile, isOwner, onSignOut, onViewLanding, requestedPage }
 
           {activePage === "Overview" && renderOverview()}
           {activePage === "Transactions" && renderTransactions()}
-          {activePage === "Inventory" && renderInventory()}
+          {activePage === "Goods / Products" && renderInventory()}
           {activePage === "Customers" && renderCustomers()}
           {activePage === "Debts" && renderDebts()}
           {activePage === "Analytics" && renderAnalytics()}
@@ -1265,13 +1298,48 @@ function App({ user, profile, isOwner, onSignOut, onViewLanding, requestedPage }
         </Modal>
       )}
 
+      {stockProduct && (
+        <Modal title="Add stock" subtitle={`${stockProduct.name}: you have ${stockProduct.stock} now.`} onClose={() => setStockProduct(null)}>
+          <form className="modal-form" onSubmit={submitAddStock}>
+            <label>How many units did you receive?<input autoFocus type="number" min="1" step="1" value={stockForm.quantity} onChange={(event) => setStockForm({ ...stockForm, quantity: event.target.value })} placeholder="e.g. 30" required /></label>
+            <label>Note (optional)<input value={stockForm.note} onChange={(event) => setStockForm({ ...stockForm, note: event.target.value })} placeholder="e.g. New delivery from supplier" /></label>
+            <div className="modal-actions"><button type="button" className="secondary-button" onClick={() => setStockProduct(null)}>Cancel</button><button className="primary-button" type="submit"><PackagePlus size={16} /> Add to stock</button></div>
+          </form>
+        </Modal>
+      )}
+
+      {historyProduct && (
+        <Modal title="Stock history" subtitle={`${historyProduct.name}: ${historyProduct.stocked} stocked, ${historyProduct.sold} sold, ${historyProduct.stock} left.`} onClose={() => setHistoryProduct(null)}>
+          {historyRows === null ? (
+            <p className="demo-note">Loading history...</p>
+          ) : (
+            <div className="table-scroll history-scroll">
+              <table>
+                <thead><tr><th>Date</th><th>What happened</th><th>Change</th><th>Left</th></tr></thead>
+                <tbody>
+                  {historyRows.map((row) => (
+                    <tr key={row.id}>
+                      <td className="muted-cell">{new Date(row.created_at).toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" })}</td>
+                      <td><strong>{MOVEMENT_LABELS[row.kind] || row.kind}</strong>{row.note ? <small className="history-note">{row.note}</small> : null}</td>
+                      <td className={row.change > 0 ? "amount-cell" : "amount-cell expense-amount"}>{row.change > 0 ? `+${row.change}` : row.change}</td>
+                      <td>{row.stock_after}</td>
+                    </tr>
+                  ))}
+                  {historyRows.length === 0 && <EmptyRow message="No history yet." />}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Modal>
+      )}
+
       {editingProduct && productForm && (
-        <Modal title="Edit product" subtitle="Update the details or correct the stock count." onClose={() => setEditingProduct(null)}>
+        <Modal title="Edit product" subtitle="Update the details. To receive more goods, use Add stock so your history stays correct." onClose={() => setEditingProduct(null)}>
           <form className="modal-form" onSubmit={saveProductEdit}>
             <label>Product name<input autoFocus value={productForm.name} onChange={(event) => setProductForm({ ...productForm, name: event.target.value })} required /></label>
             <label>Category<select value={productForm.category} onChange={(event) => setProductForm({ ...productForm, category: event.target.value })}>{withCurrent(PRODUCT_CATEGORIES, productForm.category).map((item) => <option key={item}>{item}</option>)}</select></label>
             <div className="form-row">
-              <label>Stock quantity<input type="number" min="0" step="1" value={productForm.stock} onChange={(event) => setProductForm({ ...productForm, stock: event.target.value })} required /></label>
+              <label>Stock in hand<input type="number" min="0" step="1" value={productForm.stock} onChange={(event) => setProductForm({ ...productForm, stock: event.target.value })} required /></label>
               <label>Unit price ({currency})<input type="number" min="0" step="0.01" value={productForm.price} onChange={(event) => setProductForm({ ...productForm, price: event.target.value })} required /></label>
             </div>
             <div className="modal-actions"><button type="button" className="secondary-button" onClick={() => setEditingProduct(null)}>Cancel</button><button className="primary-button" type="submit"><Check size={16} /> Save changes</button></div>

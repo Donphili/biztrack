@@ -30,3 +30,7 @@
 [data-theme="dark"] .back-button { background: #181b36; border-color: #2a2e52; color: #c6caea; }
 [data-theme="dark"] .back-button:hover { border-color: #a99eff; color: #c4bcff; }
 @media (max-width: 700px) { .back-button span { display: none; } .back-button { padding: 0 10px; } }
+
+.history-scroll { max-height: 55vh; overflow: auto; }
+.history-note { display: block; color: #6d7388; font-weight: 400; margin-top: 2px; }
+[data-theme="dark"] .history-note { color: #8a90b5; }
