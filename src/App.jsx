@@ -4,6 +4,7 @@ import { supabase } from "./supabaseClient";
 import OwnerClients from "./Owner.jsx";
 import ThemeToggle from "./ThemeToggle.jsx";
 import PaymentInfo from "./PaymentInfo.jsx";
+import LoadingScreen from "./LoadingScreen.jsx";
 import { OWNER_CONTACT, OWNER_WHATSAPP_LINK } from "./config";
 import { useTheme } from "./theme";
 import { CURRENCIES, formatAxis, formatMoney } from "./currency";
@@ -1135,7 +1136,7 @@ function App({ user, profile, isOwner, onSignOut, onViewLanding, requestedPage }
     return () => window.removeEventListener("popstate", handlePop);
   }, []);
 
-  if (loading) return <div className="auth-center">Loading your workspace...</div>;
+  if (loading) return <LoadingScreen label="Loading your workspace..." />;
   if (loadError) return <div className="auth-center">We could not load your data: {loadError}</div>;
 
   return (

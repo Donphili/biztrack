@@ -42,3 +42,8 @@
 .auth-theme { position: fixed; top: 16px; right: 16px; }
 [data-theme="dark"] .auth-theme .icon-button { color: #c6caea; }
 .auth-card { max-height: calc(100vh - 48px); overflow-y: auto; }
+
+.loading-label { margin: 0 0 14px; }
+.loading-slow { max-width: 340px; margin: 0 auto; }
+.loading-slow p { margin: 0 0 14px; color: #6d7388; line-height: 1.55; font-size: 14px; }
+[data-theme="dark"] .loading-slow p { color: #8a90b5; }

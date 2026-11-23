@@ -3,6 +3,7 @@ import { supabase } from "./supabaseClient";
 import { OWNER_CONTACT, OWNER_WHATSAPP_LINK } from "./config";
 import AuthScreen, { ResetPassword } from "./Auth.jsx";
 import Landing from "./Landing.jsx";
+import LoadingScreen from "./LoadingScreen.jsx";
 import PaymentInfo from "./PaymentInfo.jsx";
 import App from "./App.jsx";
 import "./Auth.css";
@@ -62,7 +63,7 @@ export default function Root() {
   };
 
   if (session === undefined) {
-    return <div className="auth-center">Loading BizTrack...</div>;
+    return <LoadingScreen />;
   }
 
   if (recovering && session) {
@@ -70,7 +71,7 @@ export default function Root() {
   }
 
   if (userId && profileState === "idle") {
-    return <div className="auth-center">Loading BizTrack...</div>;
+    return <LoadingScreen />;
   }
 
   if (!session) {
@@ -79,7 +80,7 @@ export default function Root() {
     }
     return <AuthScreen key={authView} initialMode={authView} onBack={() => setAuthView(null)} />;
   }
-  if (profile && profile.id !== userId) return <div className="auth-center">Loading BizTrack...</div>;
+  if (profile && profile.id !== userId) return <LoadingScreen />;
 
   if (profileState === "error") {
     return (
@@ -113,7 +114,7 @@ export default function Root() {
     );
   }
 
-  if (profileState !== "ready") return <div className="auth-center">Loading BizTrack...</div>;
+  if (profileState !== "ready") return <LoadingScreen />;
 
   const isOwner = session.user.app_metadata?.is_owner === true;
 
