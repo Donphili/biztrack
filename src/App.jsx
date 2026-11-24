@@ -5,6 +5,8 @@ import OwnerClients from "./Owner.jsx";
 import ThemeToggle from "./ThemeToggle.jsx";
 import PaymentInfo from "./PaymentInfo.jsx";
 import LoadingScreen from "./LoadingScreen.jsx";
+import { downloadAllData } from "./dataExport";
+import { useInstall } from "./install";
 import { OWNER_CONTACT, OWNER_WHATSAPP_LINK } from "./config";
 import { useTheme } from "./theme";
 import { CURRENCIES, formatAxis, formatMoney } from "./currency";
@@ -172,6 +174,11 @@ function App({ user, profile, isOwner, onSignOut, onViewLanding, requestedPage }
   const [transactionForm, setTransactionForm] = useState(null);
   const [editingProduct, setEditingProduct] = useState(null);
   const [productForm, setProductForm] = useState(null);
+  const [downloading, setDownloading] = useState(false);
+  const [showDelete, setShowDelete] = useState(false);
+  const [deleteText, setDeleteText] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const installApp = useInstall();
   const [stockProduct, setStockProduct] = useState(null);
   const [stockForm, setStockForm] = useState({ quantity: "", note: "" });
   const [historyProduct, setHistoryProduct] = useState(null);
@@ -450,6 +457,30 @@ function App({ user, profile, isOwner, onSignOut, onViewLanding, requestedPage }
       setProducts((current) => current.map((product) => (product.id === item.productId ? { ...product, stock: product.stock + item.quantity, sold: Math.max(0, product.sold - item.quantity) } : product)));
     }
     notify("Transaction deleted.");
+  }
+
+  async function handleDownload() {
+    setDownloading(true);
+    try {
+      await downloadAllData({ transactions, products, debts });
+      notify("Your data was downloaded.");
+    } catch (error) {
+      notify(error.message || "Could not download your data.");
+    }
+    setDownloading(false);
+  }
+
+  async function handleDeleteAccount(event) {
+    event.preventDefault();
+    if (deleteText.trim().toUpperCase() !== "DELETE") return;
+    setDeleting(true);
+    const { error } = await supabase.rpc("delete_my_account");
+    if (error) {
+      setDeleting(false);
+      notify(error.message);
+      return;
+    }
+    await onSignOut();
   }
 
   function openAddStock(product) {
@@ -1045,7 +1076,10 @@ function App({ user, profile, isOwner, onSignOut, onViewLanding, requestedPage }
       { q: "A customer bought on credit. What do I do?", a: "Open Debts, tap Add debt, and enter the customer, amount and due date. When they pay, tap Record payment and it is added to your income." },
       { q: "Does changing the currency convert my amounts?", a: "No. It only changes the symbol. Amounts you already saved stay the same numbers." },
       { q: "Can I download my records?", a: "Yes. In Transactions, tap Export CSV to get a file you can open in Excel." },
-      { q: "Is my data private?", a: "Yes. Only you can see your records." },
+      { q: "Is my data private?", a: "Yes. Only you can see your records. You can read our Privacy Policy at the link in Settings." },
+      { q: "Can I use BizTrack like an app on my phone?", a: "Yes. In Settings, tap Install BizTrack. On an iPhone, open BizTrack in Safari, tap Share, then Add to Home Screen. It then opens full screen with its own icon." },
+      { q: "How do I keep a copy of my records?", a: "In Settings, tap Download my data. You get a file with your transactions, products, debts and stock history that opens in Excel." },
+      { q: "How do I delete my account?", a: "In Settings, tap Delete my account. Download your data first if you want a copy, because deleting erases everything." },
       { q: "What happens when my free trial ends?", a: "Your records stay safe, but you cannot add new ones until you pay. See How to pay below, then message us on WhatsApp so we can activate your account." },
       { q: "I forgot my password.", a: "Log out, then tap Forgot password on the login screen. We will email you a link to choose a new one." },
     ];
@@ -1105,8 +1139,33 @@ function App({ user, profile, isOwner, onSignOut, onViewLanding, requestedPage }
           </select>
         </div>
         <p className="demo-note">Changing currency only changes the symbol. Amounts you already saved are not converted.</p>
-        <div className="settings-item"><span>Version</span><strong>2.0.0</strong></div>
-        <button className="secondary-button" onClick={onSignOut}><LogOut size={16} /> Log out</button>
+        <div className="settings-item">
+          <span>Use like an app</span>
+          {installApp.standalone ? (
+            <strong>Installed</strong>
+          ) : installApp.canInstall ? (
+            <button className="secondary-button settings-small" onClick={installApp.install}>Install BizTrack</button>
+          ) : (
+            <small className="settings-hint">
+              {installApp.ios ? "In Safari, tap Share, then Add to Home Screen." : "In your browser menu, choose Install app or Add to Home screen."}
+            </small>
+          )}
+        </div>
+        <div className="settings-item">
+          <span>Your data</span>
+          <button className="secondary-button settings-small" onClick={handleDownload} disabled={downloading}>{downloading ? "Preparing..." : "Download my data"}</button>
+        </div>
+        <div className="settings-item">
+          <span>Legal</span>
+          <span className="settings-links"><a href="/privacy" target="_blank" rel="noreferrer">Privacy Policy</a> · <a href="/terms" target="_blank" rel="noreferrer">Terms of Use</a></span>
+        </div>
+        <div className="settings-item"><span>Version</span><strong>2.1.0</strong></div>
+        <div className="settings-buttons">
+          <button className="secondary-button" onClick={onSignOut}><LogOut size={16} /> Log out</button>
+          {!isOwner && (
+            <button className="danger-button" onClick={() => { setDeleteText(""); setShowDelete(true); }}><Trash2 size={16} /> Delete my account</button>
+          )}
+        </div>
       </section>
     );
   }
@@ -1295,6 +1354,22 @@ function App({ user, profile, isOwner, onSignOut, onViewLanding, requestedPage }
               <label>Category<select value={transactionForm.category} onChange={(event) => setTransactionForm({ ...transactionForm, category: event.target.value })}>{withCurrent(TRANSACTION_CATEGORIES, transactionForm.category).map((item) => <option key={item}>{item}</option>)}</select></label>
             </div>
             <div className="modal-actions"><button type="button" className="secondary-button" onClick={() => setEditingTransaction(null)}>Cancel</button><button className="primary-button" type="submit"><Check size={16} /> Save changes</button></div>
+          </form>
+        </Modal>
+      )}
+
+      {showDelete && (
+        <Modal title="Delete my account" subtitle="This permanently deletes your account and every record in it." onClose={() => setShowDelete(false)}>
+          <form className="modal-form" onSubmit={handleDeleteAccount}>
+            <p className="delete-warning">
+              Your products, stock history, sales, expenses and debts will be erased and cannot be recovered. Download a copy first if you want to keep your records.
+            </p>
+            <button type="button" className="secondary-button" onClick={handleDownload} disabled={downloading}>{downloading ? "Preparing..." : "Download my data first"}</button>
+            <label>Type DELETE to confirm<input value={deleteText} onChange={(event) => setDeleteText(event.target.value)} placeholder="DELETE" autoComplete="off" /></label>
+            <div className="modal-actions">
+              <button type="button" className="secondary-button" onClick={() => setShowDelete(false)}>Cancel</button>
+              <button className="danger-button solid" type="submit" disabled={deleting || deleteText.trim().toUpperCase() !== "DELETE"}>{deleting ? "Deleting..." : "Delete everything"}</button>
+            </div>
           </form>
         </Modal>
       )}

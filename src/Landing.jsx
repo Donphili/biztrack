@@ -273,7 +273,7 @@ export default function Landing({ ownerMode = false, onLogin, onSignup, onDashbo
       </section>
 
       <footer className="landing-footer">
-        <span>© 2026 BizTrack</span>
+        <span>© 2026 BizTrack · <a href="/privacy">Privacy</a> · <a href="/terms">Terms</a></span>
         <span>
           <a href={whatsappHref} target="_blank" rel="noreferrer">WhatsApp</a>
           {" · "}

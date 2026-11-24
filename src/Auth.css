@@ -47,3 +47,7 @@
 .loading-slow { max-width: 340px; margin: 0 auto; }
 .loading-slow p { margin: 0 0 14px; color: #6d7388; line-height: 1.55; font-size: 14px; }
 [data-theme="dark"] .loading-slow p { color: #8a90b5; }
+.auth-legal { margin: 14px 0 0; text-align: center; font-size: 12.5px; line-height: 1.5; color: #6d7388; }
+.auth-legal a { color: #7667f8; font-weight: 600; }
+[data-theme="dark"] .auth-legal { color: #8a90b5; }
+[data-theme="dark"] .auth-legal a { color: #a99eff; }

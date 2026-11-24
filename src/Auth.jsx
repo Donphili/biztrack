@@ -102,6 +102,13 @@ export default function AuthScreen({ initialMode = "login", onBack }) {
           </button>
         </form>
 
+        {isSignup && (
+          <p className="auth-legal">
+            By creating an account you agree to our <a href="/terms" target="_blank" rel="noreferrer">Terms</a> and{" "}
+            <a href="/privacy" target="_blank" rel="noreferrer">Privacy Policy</a>.
+          </p>
+        )}
+
         <p className="auth-switch">
           {isForgot ? "Remembered it?" : isSignup ? "Already have an account?" : "New to BizTrack?"}{" "}
           <button type="button" onClick={() => { setMode(isSignup || isForgot ? "login" : "signup"); setMessage({ type: "", text: "" }); }}>

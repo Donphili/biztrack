@@ -34,3 +34,23 @@
 .history-scroll { max-height: 55vh; overflow: auto; }
 .history-note { display: block; color: #6d7388; font-weight: 400; margin-top: 2px; }
 [data-theme="dark"] .history-note { color: #8a90b5; }
+
+.settings-buttons { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 18px; }
+.settings-buttons .secondary-button { margin-top: 0; }
+.settings-small { height: 38px; padding: 0 14px; margin-top: 0; }
+.settings-hint { color: #6d7388; text-align: right; max-width: 280px; line-height: 1.4; }
+.settings-links a { color: #7667f8; font-weight: 600; text-decoration: none; }
+.danger-button { display: inline-flex; align-items: center; gap: 8px; height: 44px; padding: 0 18px; border: 1px solid #f0b4b4; border-radius: 12px; background: transparent; color: #c0392b; font: inherit; font-weight: 600; cursor: pointer; }
+.danger-button:hover { background: #fdecec; }
+.danger-button.solid { background: #d64545; border-color: #d64545; color: #fff; }
+.danger-button.solid:hover { background: #bf3636; }
+.danger-button:disabled { opacity: 0.5; cursor: not-allowed; }
+.delete-warning { margin: 0; padding: 12px 14px; border-radius: 12px; background: #fdecec; color: #9c2a2a; line-height: 1.5; font-size: 14px; }
+[data-theme="dark"] .settings-hint { color: #8a90b5; }
+[data-theme="dark"] .settings-links a { color: #a99eff; }
+[data-theme="dark"] .danger-button { border-color: #5a2a33; color: #ff8d94; }
+[data-theme="dark"] .danger-button:hover { background: #3a1d22; }
+[data-theme="dark"] .danger-button.solid { background: #c0392b; border-color: #c0392b; color: #fff; }
+[data-theme="dark"] .delete-warning { background: #3a1d22; color: #ff9aa1; }
+
+.settings-panel .settings-item { align-items: center; }
